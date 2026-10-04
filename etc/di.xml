@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!-- llms.jsonl line providers — bridge modules append catalog lines (e.g. vendor LocalBusiness) -->
+    <type name="MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder">
+        <arguments>
+            <argument name="lineProviders" xsi:type="array">
+                <!--
+                    Bridge example (from a marketplace module's di.xml):
+                    <item name="vendors"
+                          xsi:type="object">YourVendor\Module\Model\LlmsJsonl\VendorLineProvider</item>
+                -->
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- llms.txt section providers — other modules add sections from their own di.xml -->
+    <type name="MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder">
+        <arguments>
+            <argument name="sectionProviders" xsi:type="array">
+                <item name="faq"
+                      xsi:type="object">MageOS\Aeo\Model\LlmsTxt\FaqLlmsSectionProvider</item>
+                <!--
+                    Bridge modules register their section providers here.
+                    Example (from a marketplace module's di.xml):
+                    <item name="vendors"
+                          xsi:type="object">YourVendor\Module\Model\LlmsTxt\VendorSectionProvider</item>
+                -->
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- AI crawler directives appended to robots.txt -->
+    <type name="Magento\Robots\Model\Robots">
+        <plugin name="mageos_aeo_ai_robots_directives"
+                type="MageOS\Aeo\Plugin\Robots\AppendAiDirectivesPlugin"
+                sortOrder="10"/>
+    </type>
+
+    <!-- Mass attribute updates write straight to the EAV tables without saving the
+         products, so no save event reports them. Registered globally: the admin mass
+         actions, REST and any other caller reach the same service. -->
+    <type name="Magento\Catalog\Model\Product\Action">
+        <plugin name="mageos_aeo_invalidate_jsonl_on_mass_attribute_update"
+                type="MageOS\Aeo\Plugin\Catalog\Product\Action\InvalidateJsonlOnMassAttributeUpdate"
+                sortOrder="10"/>
+    </type>
+
+    <!--
+        Public documents: MageOS_Seo's session check starts no session for these paths, so no
+        cookie and no no-cache headers land on responses meant to be shared-cached.
+    -->
+    <type name="MageOS\Seo\Model\Router\PublicPaths">
+        <arguments>
+            <argument name="paths" xsi:type="array">
+                <!-- The llms documents (Model\Router\LlmsTxtRouter) -->
+                <item name="llms" xsi:type="string">llms.txt</item>
+                <item name="llms_full" xsi:type="string">llms-full.txt</item>
+                <item name="llms_jsonl" xsi:type="string">llms.jsonl</item>
+            </argument>
+            <argument name="prefixes" xsi:type="array">
+                <!-- The internal controller URL, which the canonical-path redirect sends back -->
+                <item name="aeo_front_name" xsi:type="string">mageos-aeo/</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        The llms documents' group in MageOS_Seo's rebuild queue: the consumer, the seo:rebuild
+        command and every setup run find it there. The pool is built for every save an observer
+        inspects, so the handler takes its builder as a proxy.
+    -->
+    <type name="MageOS\Seo\Model\Rebuild\HandlerPool">
+        <arguments>
+            <argument name="handlers" xsi:type="array">
+                <item name="llms" xsi:type="object">MageOS\Aeo\Model\Feed\LlmsRebuildHandler</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="MageOS\Aeo\Model\Feed\LlmsRebuildHandler">
+        <arguments>
+            <argument name="feedRegenerator" xsi:type="object">MageOS\Aeo\Model\Feed\FeedRegenerator\Proxy</argument>
+        </arguments>
+    </type>
+
+</config>

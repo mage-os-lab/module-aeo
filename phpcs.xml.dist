@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="MageOS_Aeo">
+    <rule ref="Magento2"/>
+
+    <!-- PHP 8.1 intersection types (Type&MockObject) are tokenized as T_TYPE_INTERSECTION by PHPCS 3.7+,
+         but the sniff's allowed-token list only contains T_BITWISE_AND, so it can't find the docblock
+         above properties with intersection type hints. Exclude for tests until upstream is fixed. -->
+    <rule ref="Magento2.Commenting.ClassPropertyPHPDocFormatting">
+        <exclude-pattern>*/Test/*</exclude-pattern>
+    </rule>
+    <file>Api</file>
+    <file>Controller</file>
+    <file>Cron</file>
+    <file>Exception</file>
+    <file>Model</file>
+    <file>Observer</file>
+    <file>Plugin</file>
+    <file>Setup</file>
+    <file>Test</file>
+</ruleset>

@@ -1,0 +1,29 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    // Scope mutation testing to source whose logic unit tests can verify, as MageOS_Seo (which
+    // this module was split from) does. The llms.txt and llms.jsonl builders are covered by
+    // Test/Integration against a real catalogue: what they emit depends on collections and
+    // config a doubled test cannot reproduce, so their mutants are unkillable in unit tests by
+    // design. Plugin/ and Controller/ are outside the scanned directories, as in MageOS_Seo.
+    "source": {
+        "directories": ["Model", "Observer"],
+        "excludes": [
+            "LlmsJsonl/JsonlBuilder.php",
+            "LlmsTxt"
+        ]
+    },
+    "mutators": { "@default": true },
+    "phpUnit": { "configDir": "." },
+    // Infection runs PHPUnit from the module directory, where Magento's code generator has never
+    // run, so a test that doubles a generated class (a *Factory) cannot be built. Those tests are
+    // tagged magento-generated and run in the unit job, inside an installation. The classes they
+    // cover are excluded above anyway.
+    "testFrameworkOptions": "--exclude-group=magento-generated",
+    // The same thresholds as MageOS_Seo.
+    "minMsi": 58,
+    "minCoveredMsi": 70,
+    "logs": {
+        "text": "infection.log",
+        "github": true
+    }
+}

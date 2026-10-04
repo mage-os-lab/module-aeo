@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Module/etc/module.xsd">
+    <module name="MageOS_Aeo">
+        <sequence>
+            <!--
+                MageOS_Seo owns the rebuild queue and handler pool these documents are rebuilt
+                through, the FAQ source pool, the Organization they describe, the admin tab and ACL
+                parent their settings sit under, and the public-path registry and canonical-path
+                redirect their URLs use.
+            -->
+            <module name="MageOS_Seo"/>
+            <module name="Magento_Catalog"/>
+            <module name="Magento_Store"/>
+            <module name="Magento_Robots"/>
+        </sequence>
+    </module>
+</config>

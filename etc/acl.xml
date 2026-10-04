@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl>
+        <resources>
+            <resource id="Magento_Backend::admin">
+                <!-- Under MageOS_Seo's SEO resource, beside its own configuration resource. -->
+                <resource id="MageOS_Seo::seo">
+                    <resource id="MageOS_Aeo::config" title="AI Information &amp; Crawlers Configuration"
+                              translate="title" sortOrder="30"/>
+                </resource>
+            </resource>
+        </resources>
+    </acl>
+</config>

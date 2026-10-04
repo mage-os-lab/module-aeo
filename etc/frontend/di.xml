@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        The llms.txt router runs before core's URL-rewrite router (sortOrder 20), as core's
+        robots.txt and security.txt routers do (10). While a file is enabled its path is this
+        module's, and a rewrite for it never applies. A sortOrder equal to core's left the order
+        to how the di.xml files merged.
+    -->
+    <type name="Magento\Framework\App\RouterList">
+        <arguments>
+            <argument name="routerList" xsi:type="array">
+                <item name="mageos_aeo_llms" xsi:type="array">
+                    <item name="class"     xsi:type="string">MageOS\Aeo\Model\Router\LlmsTxtRouter</item>
+                    <item name="disable"   xsi:type="boolean">false</item>
+                    <item name="sortOrder" xsi:type="string">15</item>
+                </item>
+            </argument>
+        </arguments>
+    </type>
+
+</config>

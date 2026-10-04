@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <!--
+            The standard-router URL behind the llms documents. LlmsTxtRouter forwards here, and the
+            controllers 301 a direct request back to the canonical path.
+        -->
+        <route id="mageos_aeo" frontName="mageos-aeo">
+            <module name="MageOS_Aeo"/>
+        </route>
+    </router>
+</config>

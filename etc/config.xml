@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <mageos_aeo>
+            <llms_txt>
+                <enabled>1</enabled>
+                <full_enabled>1</full_enabled>
+                <jsonl_enabled>0</jsonl_enabled>
+                <faq_groups>global</faq_groups>
+            </llms_txt>
+            <feeds>
+                <!-- empty = var/mageos_aeo; multi-host deployments set a shared mount -->
+                <storage_dir/>
+            </feeds>
+            <ai_robots>
+                <enabled>0</enabled>
+                <disallowed>CCBot,Bytespider</disallowed>
+            </ai_robots>
+        </mageos_aeo>
+    </default>
+</config>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
+         colors="true"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory=".phpunit.cache"
+         executionOrder="random"
+         failOnWarning="true"
+         failOnRisky="true">
+    <testsuites>
+        <testsuite name="unit">
+            <directory>Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>Api</directory>
+            <directory>Controller</directory>
+            <directory>Cron</directory>
+            <directory>Exception</directory>
+            <directory>Model</directory>
+            <directory>Observer</directory>
+            <directory>Plugin</directory>
+            <directory>Setup</directory>
+        </include>
+    </source>
+</phpunit>

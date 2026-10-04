@@ -1,0 +1,61 @@
+"GPTBot (OpenAI training)","GPTBot (OpenAI training)"
+"ChatGPT-User (OpenAI live)","ChatGPT-User (OpenAI live)"
+"OAI-SearchBot (OpenAI search)","OAI-SearchBot (OpenAI search)"
+"Google-Extended (Gemini training)","Google-Extended (Gemini training)"
+"A feed rebuild is already running; this one was not started.","A feed rebuild is already running; this one was not started."
+"The feed storage directory must be an absolute path.","The feed storage directory must be an absolute path."
+"The feed storage directory must not contain "".."".","The feed storage directory must not contain ""..""."
+"The feed storage directory must not contain hidden directories.","The feed storage directory must not contain hidden directories."
+"The feed storage directory does not exist: %1","The feed storage directory does not exist: %1"
+"The feed storage directory is not a writable directory: %1","The feed storage directory is not a writable directory: %1"
+"Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php.","Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php."
+"The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php.","The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php."
+"Frequently asked questions:","Frequently asked questions:"
+"Key URLs","Key URLs"
+Home,Home
+"Store front page","Store front page"
+Sitemap,Sitemap
+"XML sitemap of indexable pages","XML sitemap of indexable pages"
+"Base URL: %1","Base URL: %1"
+"Locale: %1","Locale: %1"
+"Search URL template: %1","Search URL template: %1"
+"Social profiles: %1","Social profiles: %1"
+"Structured data: schema.org JSON-LD; types the pages can carry: %1","Structured data: schema.org JSON-LD; types the pages can carry: %1"
+"Product schema templates: %1","Product schema templates: %1"
+"Structured data: schema.org JSON-LD on product pages (%1)","Structured data: schema.org JSON-LD on product pages (%1)"
+"Contact for automated queries: %1","Contact for automated queries: %1"
+"%1 products","%1 products"
+"Category Tree","Category Tree"
+"AI Information & Crawlers Configuration","AI Information & Crawlers Configuration"
+"AI Information & Crawlers","AI Information & Crawlers"
+"AI Discoverability (llms.txt)","AI Discoverability (llms.txt)"
+"Enable /llms.txt","Enable /llms.txt"
+"Serve a machine-readable site summary at /llms.txt for LLM crawlers.","Serve a machine-readable site summary at /llms.txt for LLM crawlers."
+"Enable /llms-full.txt","Enable /llms-full.txt"
+"Serve the extended document with full vendor and category listings
+at /llms-full.txt.","Serve the extended document with full vendor and category listings
+at /llms-full.txt."
+"Enable /llms.jsonl","Enable /llms.jsonl"
+"Serve a machine-readable NDJSON product catalog (one JSON-LD Product per
+line) at /llms.jsonl. Off by default.","Serve a machine-readable NDJSON product catalog (one JSON-LD Product per
+line) at /llms.jsonl. Off by default."
+"FAQ Groups","FAQ Groups"
+"FAQ groups whose questions appear in /llms.txt (the first 5) and /llms-full.txt
+(all), in this order. Select none to leave FAQs out.","FAQ groups whose questions appear in /llms.txt (the first 5) and /llms-full.txt
+(all), in this order. Select none to leave FAQs out."
+"Feed Storage","Feed Storage"
+"Storage Directory","Storage Directory"
+"Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
+llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
+a shared mount for multi-server deployments must be listed under
+<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
+llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
+a shared mount for multi-server deployments must be listed under
+<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php."
+"AI Crawler robots.txt Directives","AI Crawler robots.txt Directives"
+"Append AI Crawler Directives","Append AI Crawler Directives"
+"Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
+Crawlers not selected keep following your standard ""User-agent: *"" rules.","Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
+Crawlers not selected keep following your standard ""User-agent: *"" rules."
+"Disallow These AI Crawlers","Disallow These AI Crawlers"
+"Selected crawlers get ""Disallow: /"". Crawlers not selected get no group of their own and follow your ""User-agent: *"" rules.","Selected crawlers get ""Disallow: /"". Crawlers not selected get no group of their own and follow your ""User-agent: *"" rules."

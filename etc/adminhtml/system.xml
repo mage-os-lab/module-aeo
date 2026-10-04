@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <!-- Under MageOS_Seo's "MageOS SEO" tab, between its SEO and Merchant Policies sections. -->
+        <section id="mageos_aeo" translate="label" type="text" sortOrder="30"
+                 showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>AI Information &amp; Crawlers</label>
+            <tab>mageos_seo</tab>
+            <resource>MageOS_Aeo::config</resource>
+
+            <group id="llms_txt" translate="label" type="text" sortOrder="10"
+                   showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>AI Discoverability (llms.txt)</label>
+                <field id="enabled" translate="label comment" type="select"
+                       sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable /llms.txt</label>
+                    <comment>Serve a machine-readable site summary at /llms.txt for LLM crawlers.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="full_enabled" translate="label comment" type="select"
+                       sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable /llms-full.txt</label>
+                    <comment>Serve the extended document with full vendor and category listings
+at /llms-full.txt.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="jsonl_enabled" translate="label comment" type="select"
+                       sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable /llms.jsonl</label>
+                    <comment>Serve a machine-readable NDJSON product catalog (one JSON-LD Product per
+line) at /llms.jsonl. Off by default.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="faq_groups" translate="label comment" type="multiselect"
+                       sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1" canRestore="1">
+                    <label>FAQ Groups</label>
+                    <comment>FAQ groups whose questions appear in /llms.txt (the first 5) and /llms-full.txt
+(all), in this order. Select none to leave FAQs out.</comment>
+                    <source_model>MageOS\Aeo\Model\Config\Source\FaqGroups</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
+            </group>
+
+            <group id="feeds" translate="label" type="text" sortOrder="20"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Feed Storage</label>
+                <field id="storage_dir" translate="label comment" type="text"
+                       sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Storage Directory</label>
+                    <backend_model>MageOS\Aeo\Model\Config\Backend\FeedStorageDir</backend_model>
+                    <comment><![CDATA[Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
+llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
+a shared mount for multi-server deployments must be listed under
+<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.]]></comment>
+                </field>
+            </group>
+
+            <group id="ai_robots" translate="label" type="text" sortOrder="30"
+                   showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>AI Crawler robots.txt Directives</label>
+                <field id="enabled" translate="label comment" type="select"
+                       sortOrder="10" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Append AI Crawler Directives</label>
+                    <comment>Add a "Disallow: /" robots.txt group for each AI crawler selected below.
+Crawlers not selected keep following your standard "User-agent: *" rules.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="disallowed" translate="label comment" type="multiselect"
+                       sortOrder="20" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Disallow These AI Crawlers</label>
+                    <comment>Selected crawlers get "Disallow: /". Crawlers not selected get no group of their own and follow your "User-agent: *" rules.</comment>
+                    <source_model>MageOS\Aeo\Model\Config\Source\AiBots</source_model>
+                    <depends><field id="enabled">1</field></depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

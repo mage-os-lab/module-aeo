@@ -1,0 +1,3 @@
+"Serve a machine-readable NDJSON product catalog (one JSON-LD Product per
+line) at /llms.jsonl. Off by default.","Serve a machine-readable NDJSON product catalogue (one JSON-LD Product per
+line) at /llms.jsonl. Off by default."

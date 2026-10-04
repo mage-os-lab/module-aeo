@@ -1,0 +1,126 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <!--
+        Feed invalidation: these observers queue a rebuild of the llms documents (the served files
+        stay in place until the consumer replaces them), through MageOS_Seo's
+        Model\Rebuild\Invalidator, which skips groups nothing can build.
+        Feed\LlmsInvalidationPolicy decides whether a change can affect what they show.
+    -->
+    <event name="catalog_category_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_category_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        Product save: llms.jsonl always; llms.txt / llms-full.txt when category product counts
+        change.
+    -->
+    <event name="catalog_product_save_after">
+        <observer name="mageos_aeo_invalidate_llms_jsonl_on_product_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsJsonlCache"/>
+        <observer name="mageos_aeo_invalidate_llms_on_product_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        The FAQs and the Organization, which llms.txt / llms-full.txt show. Their models' own events,
+        so a save from the admin, the REST API, an import or a data patch counts alike. The FAQ
+        events are MageOS_Faq's (and any FAQ module may dispatch them); the Organization's are
+        MageOS_Seo's.
+    -->
+    <event name="mageos_faq_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_faq_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="mageos_faq_delete_after">
+        <observer name="mageos_aeo_invalidate_llms_on_faq_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="mageos_seo_organization_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_organization_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="mageos_seo_organization_delete_after">
+        <observer name="mageos_aeo_invalidate_llms_on_organization_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        Configuration. Every way a value reaches the database saves its backend model — the admin's
+        configuration pages and `bin/magento config:set` — so this is the one hook both share. The
+        admin saves every field of a section, changed or not; the policy counts a value only when it
+        changed, and only under the paths that change what the documents show (locale, AI contact,
+        llms settings, URLs). Values config:set locks into app/etc/env.php (its lock-env option)
+        never reach the database, and so are not seen.
+    -->
+    <event name="config_data_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_config_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="config_data_delete_after">
+        <observer name="mageos_aeo_invalidate_llms_on_config_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        Moving a category re-parents it, and the llms category tree changes shape. The event is
+        dispatched by Category::move() after its transaction commits, for the admin tree and the
+        REST move alike. llms.jsonl carries product URLs without category paths, so it is
+        unaffected.
+    -->
+    <event name="category_move">
+        <observer name="mageos_aeo_invalidate_llms_on_category_move"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        Mass website assignment (Product\Action::updateWebsites()): no product is saved, so the
+        save observers never see it. It changes which products a store view lists in llms.jsonl,
+        and the category product counts in llms.txt — core counts a category's products joined to
+        catalog_product_website for the store's website.
+        Mass attribute updates have no equivalent event; the InvalidateJsonlOnMassAttributeUpdate
+        plugin covers them.
+    -->
+    <event name="catalog_product_to_website_change">
+        <observer name="mageos_aeo_invalidate_llms_jsonl_on_product_website_change"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsJsonlCache"/>
+        <observer name="mageos_aeo_invalidate_llms_on_product_website_change"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        A deleted store view's own feed files are no longer served by anything, so its directory
+        goes with it — post-commit, so a delete that rolls back keeps its files. Store views that go
+        with a group or website (core's database-level cascade, which dispatches no store_delete)
+        are swept by the next full rebuild, which removes directories whose store view no longer
+        exists. llms.txt, llms-full.txt and llms.jsonl are per store view, so the surviving store
+        views' documents do not change.
+    -->
+    <event name="store_delete">
+        <observer name="mageos_aeo_remove_feed_files_on_store_delete"
+                  instance="MageOS\Aeo\Observer\RemoveFeedFilesOnStoreDelete"/>
+    </event>
+
+    <!--
+        Deletions. A deleted entity leaves every feed that listed it, so unlike saves there is
+        nothing to check: the policy treats a delete as relevant to any group. Products also
+        change category product counts in llms.txt / llms-full.txt.
+
+        These are the post-commit events, dispatched by AbstractModel::afterDeleteCommit() for
+        model and repository deletes alike. They fire immediately after the resource's own
+        transaction is committed, so a delete wrapped in a larger transaction that later rolls
+        back queues one rebuild that turns out to be unnecessary — harmless: the rebuild finds
+        the entity still there and writes the same content.
+    -->
+    <event name="catalog_product_delete_commit_after">
+        <observer name="mageos_aeo_invalidate_llms_jsonl_on_product_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsJsonlCache"/>
+        <observer name="mageos_aeo_invalidate_llms_on_product_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="catalog_category_delete_commit_after">
+        <observer name="mageos_aeo_invalidate_llms_on_category_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+</config>

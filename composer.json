@@ -1,0 +1,70 @@
+{
+    "name": "mage-os/module-aeo",
+    "description": "AI discoverability: llms.txt, llms-full.txt and llms.jsonl feeds, and AI crawler directives in robots.txt",
+    "type": "magento2-module",
+    "license": "OSL-3.0",
+    "minimum-stability": "stable",
+    "require": {
+        "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "mage-os/module-seo": "^1.2",
+        "magento/framework": "^103.0.7",
+        "magento/module-backend": "*",
+        "magento/module-cache-invalidate": "*",
+        "magento/module-catalog": "*",
+        "magento/module-config": "*",
+        "magento/module-inventory-sales-api": "*",
+        "magento/module-page-cache": "*",
+        "magento/module-robots": "*",
+        "magento/module-sitemap": "*",
+        "magento/module-store": "*"
+    },
+    "require-dev": {
+        "bitexpert/phpstan-magento": "^0.42",
+        "friendsofphp/php-cs-fixer": "^3.50",
+        "infection/infection": "^0.29",
+        "magento/magento-coding-standard": "^40",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpunit/phpunit": "^10.5"
+    },
+    "authors": [
+        {
+            "name": "Mark Rees",
+            "email": "mark@rees.solutions",
+            "homepage": "http://rees.solutions",
+            "role": "Developer"
+        }
+    ],
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "MageOS\\Aeo\\": ""
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "infection/extension-installer": true,
+            "magento/composer-dependency-version-audit-plugin": true,
+            "magento/magento-composer-installer": false
+        }
+    },
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://mirror.mage-os.org/"
+        }
+    ],
+    "scripts": {
+        "test:unit":      "phpunit -c phpunit.xml.dist --testsuite unit",
+        "test:phpstan":   "phpstan analyse --memory-limit=1G",
+        "test:cs-fixer":  "php-cs-fixer fix --dry-run --diff --allow-risky=yes",
+        "test:phpcs":     "phpcs --standard=phpcs.xml.dist",
+        "test:infection": "infection --threads=4",
+        "test":           ["@test:unit", "@test:phpstan", "@test:cs-fixer", "@test:phpcs"]
+    }
+}
