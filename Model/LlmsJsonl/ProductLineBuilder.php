@@ -7,6 +7,7 @@ namespace MageOS\Aeo\Model\LlmsJsonl;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
+use MageOS\Seo\Model\Product\FinalPrice;
 use MageOS\Seo\Service\CurrencyService;
 
 /**
@@ -14,6 +15,10 @@ use MageOS\Seo\Service\CurrencyService;
  *
  * Deliberately leaner than the full product schema builders: just the fields an AI catalog consumer
  * needs. Omits empty values to keep each line small.
+ *
+ * A price that is not known (MageOS_Seo's Model\Product\FinalPrice: a lookup that threw, or a
+ * composite product nothing can price) is left out of the offer, with its currency, rather than
+ * written as 0.00, which reads as free. The offer stays: its availability and URL are still true.
  */
 class ProductLineBuilder
 {
@@ -28,10 +33,12 @@ class ProductLineBuilder
     /**
      * @param StoreManagerInterface $storeManager
      * @param CurrencyService $currencyService
+     * @param FinalPrice $finalPrice
      */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
-        private readonly CurrencyService       $currencyService
+        private readonly CurrencyService       $currencyService,
+        private readonly FinalPrice            $finalPrice
     ) {
     }
 
@@ -57,14 +64,19 @@ class ProductLineBuilder
             '@id'      => $url,
             'name'     => (string) $product->getName(),
             'url'      => $url,
-            'offers'   => [
-                '@type'         => 'Offer',
-                'price'         => $this->price($product),
-                'priceCurrency' => $this->currencyService->getCurrentCurrencyCode(),
-                'availability'  => $isSalable ? self::AVAILABILITY_IN_STOCK : self::AVAILABILITY_OUT,
-                'url'           => $url,
-            ],
+            'offers'   => ['@type' => 'Offer'],
         ];
+
+        // PriceInfo amounts are already in the current (display) currency — core
+        // RegularPrice / SpecialPrice::getValue() convert with PriceCurrency — which is
+        // the priceCurrency emitted with them. Converting again would apply the rate twice.
+        $price = $this->finalPrice->get($product);
+        if ($price !== null) {
+            $node['offers']['price']         = $this->currencyService->formatAmountForLlms($price);
+            $node['offers']['priceCurrency'] = $this->currencyService->getCurrentCurrencyCode();
+        }
+        $node['offers']['availability'] = $isSalable ? self::AVAILABILITY_IN_STOCK : self::AVAILABILITY_OUT;
+        $node['offers']['url']          = $url;
 
         $sku = (string) $product->getSku();
         if ($sku !== '') {
@@ -82,25 +94,6 @@ class ProductLineBuilder
         }
 
         return $node;
-    }
-
-    /**
-     * Resolve the final price as a formatted string.
-     *
-     * @param \Magento\Catalog\Model\Product $product
-     * @return string
-     */
-    private function price(ProductInterface $product): string
-    {
-        try {
-            $value = $product->getPriceInfo()->getPrice('final_price')->getValue();
-        } catch (\Exception) { // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch -- fall back to 0
-            $value = 0.0;
-        }
-        // PriceInfo amounts are already in the current (display) currency — core
-        // RegularPrice / SpecialPrice::getValue() convert with PriceCurrency — which is
-        // the priceCurrency emitted with them. Converting again would apply the rate twice.
-        return $this->currencyService->formatAmountForLlms((float) $value);
     }
 
     /**

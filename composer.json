@@ -6,7 +6,7 @@
     "minimum-stability": "stable",
     "require": {
         "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
-        "mage-os/module-seo": "^1.2",
+        "mage-os/module-seo": "^1.2.1",
         "magento/framework": "^103.0.7",
         "magento/module-backend": "*",
         "magento/module-cache-invalidate": "*",

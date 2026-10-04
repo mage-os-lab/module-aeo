@@ -127,7 +127,7 @@ catalogue, with the host changed to example.com:
 | `@type` | always | `Product` |
 | `@id`, `url` | always | the product URL |
 | `name` | always | the store view's product name |
-| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url` |
+| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url`; `price` and `priceCurrency` only when the price is known |
 | `sku` | when the product has one | |
 | `description` | when the product has one | the short description, else the description: plain text on one line, at most 300 characters, cut at a word and ended with "…" |
 | `image` | when the product has a base image | its absolute URL under the store's media URL |
@@ -136,16 +136,22 @@ The values:
 
 - `price` is the product's final price in the store view's display currency, the price the
   storefront shows. It is written with two decimals, a full stop and no thousands separator
-  (`1234.50`) whatever the store's locale, and `priceCurrency` is the current currency code. When
-  the price cannot be read, `price` is `0.00`.
+  (`1234.50`) whatever the store's locale, and `priceCurrency` is the current currency code.
+  **When the price is not known, both are left out,** rather than written as `0.00`, which reads as
+  free. The offer keeps its availability and URL. The price is not known when a composite product
+  (configurable, grouped, bundle) is priced 0, which Magento does when no option can price it, or
+  when the lookup throws, which is logged with the SKU. MageOS_Seo's `Model\Product\FinalPrice`
+  decides this here and in the product pages' structured data alike.
 - `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by MSI
   salability on the website's stock, looked up for 1,000 products at a time. When that lookup
   fails, the products it covered are written as OutOfStock and the failure is logged. Unlike the
   JSON-LD on product pages, a line has no `BackOrder`.
 
-A product gets a line when it is enabled, assigned to the store view's website, and visible in
-*Catalog* or *Catalog, Search*. Products visible in *Search* only, and those not visible
-individually, are left out. Products that are out of stock are included, as OutOfStock. A line
+A product gets a line when it is enabled, assigned to the store view's website, visible in
+*Catalog* or *Catalog, Search*, and in Magento's price index, which the feed reads its products
+with. Products visible in *Search* only, and those not visible individually, are left out.
+**Out-of-stock products have no line.** With **Display Out of Stock Products** at No, Magento's
+default, that is because Magento leaves them out of the price index. A line
 that cannot be encoded as JSON (invalid UTF-8 in a name, for example) is left out and logged as a
 notice with the product's URL and SKU.
 

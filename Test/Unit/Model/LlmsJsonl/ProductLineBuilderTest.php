@@ -11,10 +11,12 @@ use Magento\Framework\UrlInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Model\LlmsJsonl\ProductLineBuilder;
+use MageOS\Seo\Model\Product\FinalPrice;
 use MageOS\Seo\Service\CurrencyService;
 use MageOS\Seo\Test\Unit\Service\CurrencyServices;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
 
 class ProductLineBuilderTest extends TestCase
 {
@@ -59,7 +61,34 @@ class ProductLineBuilderTest extends TestCase
         $storeManager = $this->createStub(StoreManagerInterface::class);
         $storeManager->method('getStore')->willReturn($store ?? $this->createStub(Store::class));
 
-        return new ProductLineBuilder($storeManager, $currencyService ?? $this->currencyService());
+        return new ProductLineBuilder(
+            $storeManager,
+            $currencyService ?? $this->currencyService(),
+            new FinalPrice($this->createStub(LoggerInterface::class))
+        );
+    }
+
+    /**
+     * A price that is not known is left out with its currency, rather than written as 0.00; the
+     * offer keeps its availability and URL. Here, a lookup that throws.
+     */
+    public function testAnUnknownPriceIsLeftOutOfTheOffer(): void
+    {
+        // Built on its own: a stubbed method keeps the first behaviour it is given.
+        $product = $this->createStub(Product::class);
+        $product->method('getPriceInfo')->willThrowException(new \RuntimeException('No price index'));
+        $product->method('getProductUrl')->willReturn('https://example.com/blue-mug.html');
+
+        $offer = $this->builder->build($product, false)['offers'];
+
+        $this->assertSame(
+            [
+                '@type'        => 'Offer',
+                'availability' => 'https://schema.org/OutOfStock',
+                'url'          => 'https://example.com/blue-mug.html',
+            ],
+            $offer
+        );
     }
 
     public function testBuildsRequiredFields(): void

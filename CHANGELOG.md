@@ -96,6 +96,18 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ### Fixed
 
+- **A `/llms.jsonl` line whose price is not known leaves the price out, instead of `0.00`,** which
+  reads as free.
+  - The offer keeps its availability and URL, without `price` and `priceCurrency`.
+  - Unknown means a composite product (configurable, grouped, bundle) priced 0, which Magento does
+    when no option can price it, or a price lookup that throws. The lookup used to be swallowed; it
+    is now logged with the SKU.
+  - MageOS_Seo's `Model\Product\FinalPrice` decides it, as it does for the product pages' structured
+    data. **Requires mage-os/module-seo `^1.2.1`.** `ProductLineBuilder`'s constructor takes
+    `FinalPrice` after `CurrencyService`.
+- `docs/llms-txt.md` said out-of-stock products get a line, as OutOfStock. They have none. With
+  Display Out of Stock Products at No, Magento's default, Magento leaves them out of the price index
+  the feed reads its products with.
 - **llms.txt follows the format** (checked against the llms.txt spec v2 of 10 August 2026, the
   reference parser `llms_txt` on PyPI and Lighthouse's llms-txt audit).
   - Items under an H2 are `- [name](url)` links. Base URL, locale, search template, structured data
