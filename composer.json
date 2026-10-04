@@ -57,6 +57,10 @@
         {
             "type": "composer",
             "url": "https://mirror.mage-os.org/"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/mage-os-lab/module-seo"
         }
     ],
     "scripts": {
