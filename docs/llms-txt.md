@@ -64,10 +64,39 @@ Frequently asked questions:
 
 - [Home](https://example.com/): Store front page
 - [Sitemap](https://example.com/sitemap.xml): XML sitemap of indexable pages
+
+## Categories
+
+- [What's New](https://example.com/what-is-new.html)
+- [Women](https://example.com/women.html)
+- [Gear](https://example.com/gear.html): 34 products
+
+## Policies
+
+- [Returns policy](https://example.com/returns)
+- [Privacy and Cookie Policy](https://example.com/privacy-policy-cookie-restriction-mode): How we use your data
+- [About us](https://example.com/about-us)
 ```
 
 The Sitemap link points at the sitemap configured under Marketing → Site Map, and is left
 out when the store view has none.
+
+**Categories** are the storefront menu's top level, in the menu's order, with each one's product
+count. `/llms-full.txt` lists the whole tree instead; what is listed and counted is described
+[there](#content-of-llms-fulltxt).
+
+**Policies**, in both documents, lists:
+
+1. the **Returns Policy URL** (Stores → Configuration → MageOS SEO → SEO Merchant Policies → Return
+   Policy), while **Enable Return Policy Schema** is Yes;
+2. the CMS pages chosen under **Pages Listed in llms.txt** (Stores → Configuration → MageOS SEO →
+   AI Information & Crawlers → AI Discoverability), per store view and in that order. Each is listed
+   by its title, with its meta description as the note. A chosen page that is not active in the
+   store view is left out, with a warning in the log naming it; a page that is the returns policy
+   page is listed once.
+
+The section is left out when there is nothing to list. Saving or deleting any CMS page queues a
+rebuild, so a listed page's new title or description follows shortly.
 
 The locale line is left out when the store view has no locale configured, the FAQ list when the
 selected groups have no questions (the first 5 are shown), and the contact line when there is none
@@ -84,7 +113,7 @@ writing, so the language follows the store view, not the admin or CLI user. The 
 
 ## Content of /llms-full.txt
 
-Everything in `/llms.txt`, plus:
+Everything in `/llms.txt`, with the whole category tree in place of Categories, plus:
 
 - Social profile URLs (from Organisation → Social profiles), in the details list
 - Every FAQ of the selected groups, not just the first 5
@@ -100,6 +129,22 @@ Everything in `/llms.txt`, plus:
     - [Dresses](https://example.com/clothing/womens/dresses.html): 62 products
   - [Men's](https://example.com/clothing/mens.html): 97 products
 ```
+
+The tree is the storefront menu's: active categories with **Include in Menu** set, in the menu's
+order. A category left out of the menu is left out with its subcategories. Unlike the menu, every
+level is listed: **Maximal Depth** (Catalog → Catalog → Category Top Navigation) limits the menu's
+dropdowns, and every level below it is still a page.
+
+A count is the number of products the category's page lists: enabled, in the store view's website
+and visible in *Catalog* or *Catalog, Search*. An anchor category's count includes its
+subcategories' products, as its page does. A category that lists nothing has no count. The counts
+come from Magento's category product index, so:
+
+- **stock is not taken into account.** With **Display Out of Stock Products** at No, the page can
+  list fewer;
+- **they are as current as the index.** With the indexers on Update by Schedule, they follow once
+  the indexer has run. Enabling or disabling a product, or changing its visibility, does not queue
+  a rebuild of its own: the nightly rebuild brings the counts up to date.
 
 The section is left out when the store has no visible categories. If they cannot be read, the
 store's build fails: FeedRegenerator logs it and keeps serving the previous file.
@@ -127,7 +172,7 @@ catalogue, with the host changed to example.com:
 | `@type` | always | `Product` |
 | `@id`, `url` | always | the product URL |
 | `name` | always | the store view's product name |
-| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url` |
+| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url`; `price` and `priceCurrency` only when the price is known |
 | `sku` | when the product has one | |
 | `description` | when the product has one | the short description, else the description: plain text on one line, at most 300 characters, cut at a word and ended with "…" |
 | `image` | when the product has a base image | its absolute URL under the store's media URL |
@@ -136,16 +181,24 @@ The values:
 
 - `price` is the product's final price in the store view's display currency, the price the
   storefront shows. It is written with two decimals, a full stop and no thousands separator
-  (`1234.50`) whatever the store's locale, and `priceCurrency` is the current currency code. When
-  the price cannot be read, `price` is `0.00`.
-- `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by MSI
-  salability on the website's stock, looked up for 1,000 products at a time. When that lookup
-  fails, the products it covered are written as OutOfStock and the failure is logged. Unlike the
-  JSON-LD on product pages, a line has no `BackOrder`.
+  (`1234.50`) whatever the store's locale, and `priceCurrency` is the current currency code.
+  **When the price is not known, both are left out,** rather than written as `0.00`, which reads as
+  free. The offer keeps its availability and URL. The price is not known when a composite product
+  (configurable, grouped, bundle) is priced 0, which Magento does when no option can price it, or
+  when the lookup throws, which is logged with the SKU. MageOS_Seo's `Model\Product\FinalPrice`
+  decides this here and in the product pages' structured data alike.
+- `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by the
+  website's stock in MSI's stock index (`is_salable`, what the category listings filter on), read
+  for 1,000 products at a time. The index does not subtract reservations, orders placed but not yet
+  shipped: a product whose last units are all reserved stays InStock until shipping deducts them.
+  When the lookup fails, the products it covered are written as OutOfStock and the failure is
+  logged. Unlike the JSON-LD on product pages, a line has no `BackOrder`.
 
-A product gets a line when it is enabled, assigned to the store view's website, and visible in
-*Catalog* or *Catalog, Search*. Products visible in *Search* only, and those not visible
-individually, are left out. Products that are out of stock are included, as OutOfStock. A line
+A product gets a line when it is enabled, assigned to the store view's website, visible in
+*Catalog* or *Catalog, Search*, and in Magento's price index, which the feed reads its products
+with. Products visible in *Search* only, and those not visible individually, are left out.
+**Out-of-stock products have no line.** With **Display Out of Stock Products** at No, Magento's
+default, that is because Magento leaves them out of the price index. A line
 that cannot be encoded as JSON (invalid UTF-8 in a name, for example) is left out and logged as a
 notice with the product's URL and SKU.
 

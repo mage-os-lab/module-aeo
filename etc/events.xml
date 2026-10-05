@@ -37,6 +37,19 @@
         <observer name="mageos_aeo_invalidate_llms_on_faq_delete"
                   instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
     </event>
+    <!--
+        CMS pages: llms.txt / llms-full.txt list the pages chosen under Pages Listed in llms.txt, by
+        title, URL and meta description. Any page counts: a spare rebuild is cheap, and whether a
+        page is listed is a per-store-view setting that can change without the page being saved.
+    -->
+    <event name="cms_page_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_cms_page_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+    <event name="cms_page_delete_commit_after">
+        <observer name="mageos_aeo_invalidate_llms_on_cms_page_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
     <event name="mageos_seo_organization_save_after">
         <observer name="mageos_aeo_invalidate_llms_on_organization_save"
                   instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>

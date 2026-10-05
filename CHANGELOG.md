@@ -12,6 +12,8 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-10-05
+
 ### Added
 
 - **Split from mage-os/module-seo.** `/llms.txt`, `/llms-full.txt` and `/llms.jsonl`, their feed
@@ -51,6 +53,31 @@ before 2026-10-02. Its history up to then is kept in that repository.
   own headings and labels are written in each store view's language.
 - **`@api` on every interface under `Api/`**, which marks the module's contract, and a unit test
   that fails if an interface there lacks it.
+- **`/llms.txt` lists the store's categories and policies.** llms.txt v2 names "a business
+  outlining its structure and policies" as a use case; the document had only Home and the sitemap.
+  - `## Categories`: the storefront menu's top level, in its order, with product counts.
+    `/llms-full.txt` keeps its whole Category Tree instead.
+  - `## Policies`, in both documents: the Returns Policy URL (MageOS_Seo's SEO Merchant Policies,
+    while the return policy is on), then the CMS pages chosen under the new **Pages Listed in
+    llms.txt** (`mageos_aeo/llms_txt/policy_pages`, per store view), by title with the meta
+    description as a note. A chosen page not active in the store view is left out and logged.
+  - Saving or deleting a CMS page, and changing the return policy settings, queue an llms rebuild.
+  - New `Model\LlmsTxt\PolicyPages`; `LlmsTxtBuilder`'s constructor takes it after
+    `CategoryProductCount`. Requires `magento/module-cms`, and MageOS_Seo's new
+    `Config::getReturnPolicyUrl()` (`^1.2.1`).
+- **A feed that could not be rebuilt, or was written incomplete, is shown in the admin** until a
+  rebuild gets through: in the System Messages bar and once in the inbox, through MageOS_Seo's
+  rebuild problems (its `docs/rebuild-problems.md`). **Requires mage-os/module-seo `^1.2.1`.**
+  - Each group's result is recorded by `FeedRegenerator::regenerate()`, so the nightly cron's
+    rebuild counts as well as the queue's and the command's. A group is built on its own for each
+    store view: `llms.txt` failing no longer stops `llms.jsonl` being written for that store view.
+    The result is still one error message per store view.
+  - Incomplete means a stock lookup failed while `/llms.jsonl` was built (that batch is listed as
+    out of stock), or the storage directory was refused and the feeds fell back to `var/mageos_aeo`.
+  - `LlmsRebuildHandler` labels the groups `llms.txt and llms-full.txt` and `llms.jsonl`, and names
+    the nightly job (`Cron\RegenerateFeeds::JOB`) as their retry.
+  - The constructors of `FeedRegenerator` (last), `FeedStorage` (last) and `JsonlBuilder` (before
+    `lineProviders`) take MageOS_Seo's `Model\Rebuild\ProblemLog`.
 
 ### Changed
 
@@ -90,12 +117,48 @@ before 2026-10-02. Its history up to then is kept in that repository.
     assignment change all three;
   - moving a category rebuilds `/llms.txt` and `/llms-full.txt`, which list the category tree.
 - `/llms.jsonl` is written one line at a time from a paged collection, so peak memory is one page of
-  products, and availability is read in batches through MSI's `AreProductsSalableInterface`.
+  products.
+- **`/llms.jsonl` reads availability from MSI's stock index in one query per 1,000 products.** MSI's
+  `AreProductsSalableInterface` takes a list but checks each SKU on its own, about six queries each.
+  On Luma's sample catalogue a rebuild went from 2,960 queries and 7.0 s to 816 and 1.7 s.
+  - The index (`is_salable`, what category listings filter on) does not subtract reservations: a
+    product whose last units are all reserved stays InStock until shipping deducts them. On the
+    sample catalogue, all 181 products read the same either way.
+  - New `Model\ResourceModel\StockIndexSalability`. `JsonlBuilder`'s constructor takes it in place of
+    `AreProductsSalableInterface`. Requires `magento/module-inventory-indexer` in place of
+    `magento/module-inventory-sales-api`.
 - All three documents are cacheable for 24 hours (`Cache-Control: public, max-age=86400,
   s-maxage=86400`); they sent `max-age=3600` before.
 
 ### Fixed
 
+- **The category tree in `/llms-full.txt` counts what each category page lists.** An anchor category,
+  Magento's default, had no count at all, and every other category counted its raw assignments:
+  disabled products and a configurable's children included (Luma's Men → Jackets: 176, where its
+  page lists 11).
+  - A count is now the products the page lists: enabled, in the website, visible in the catalogue,
+    and for an anchor, its subcategories' too. They are read from the store view's category product
+    index in one query, by the new `Model\ResourceModel\CategoryProductCount`.
+  - Stock is not taken into account (the index has none), and the counts are as current as the
+    index. See `docs/llms-txt.md`.
+  - `LlmsTxtBuilder`'s constructor takes `CategoryProductCount` before `sectionProviders`.
+- **The category tree in `/llms-full.txt` follows the storefront menu.** A category left out of the
+  menu (Include in Menu at No) was listed; it is now left out with its subcategories. Siblings came
+  in category ID order (Luma's top level read Men, Women, Gear, Sale, What's New…); they now come in
+  the menu's order (What's New, Women, Men, Gear…). Every level is still listed, whatever the
+  menu's Maximal Depth.
+- **A `/llms.jsonl` line whose price is not known leaves the price out, instead of `0.00`,** which
+  reads as free.
+  - The offer keeps its availability and URL, without `price` and `priceCurrency`.
+  - Unknown means a composite product (configurable, grouped, bundle) priced 0, which Magento does
+    when no option can price it, or a price lookup that throws. The lookup used to be swallowed; it
+    is now logged with the SKU.
+  - MageOS_Seo's `Model\Product\FinalPrice` decides it, as it does for the product pages' structured
+    data. **Requires mage-os/module-seo `^1.2.1`.** `ProductLineBuilder`'s constructor takes
+    `FinalPrice` after `CurrencyService`.
+- `docs/llms-txt.md` said out-of-stock products get a line, as OutOfStock. They have none. With
+  Display Out of Stock Products at No, Magento's default, Magento leaves them out of the price index
+  the feed reads its products with.
 - **llms.txt follows the format** (checked against the llms.txt spec v2 of 10 August 2026, the
   reference parser `llms_txt` on PyPI and Lighthouse's llms-txt audit).
   - Items under an H2 are `- [name](url)` links. Base URL, locale, search template, structured data

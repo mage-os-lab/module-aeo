@@ -52,3 +52,15 @@ a shared mount for multi-server deployments must be listed under
 Crawlers not selected keep following your standard ""User-agent: *"" rules.","Voeg een robots.txt-groep met ""Disallow: /"" toe voor elke hieronder geselecteerde AI-crawler. Niet-geselecteerde crawlers blijven je standaardregels voor ""User-agent: *"" volgen."
 "Disallow These AI Crawlers","Deze AI-crawlers weigeren"
 "Selected crawlers get ""Disallow: /"". Crawlers not selected get no group of their own and follow your ""User-agent: *"" rules.","Geselecteerde crawlers krijgen ""Disallow: /"". Niet-geselecteerde crawlers krijgen geen eigen groep en volgen je regels voor ""User-agent: *""."
+"llms.txt and llms-full.txt","llms.txt en llms-full.txt"
+"llms.jsonl","llms.jsonl"
+"Feed %1","Feed %1"
+"The stock lookup failed, so some products are listed as out of stock.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld als niet op voorraad."
+"The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","De ingestelde opslagmap is niet toegestaan, dus de bestanden staan in plaats daarvan in var/mageos_aeo."
+Categories,Categorieën
+Policies,Beleid
+"Returns policy",Retourbeleid
+"Pages Listed in llms.txt","Pagina's in llms.txt"
+"CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
+Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
+its meta description. A page not available in this store view is left out.","CMS-pagina's die onder Beleid in /llms.txt en /llms-full.txt staan, na de URL retourbeleid (SEO-verkoopbeleid): privacy, voorwaarden, verzending, over ons. Elke pagina staat er met haar titel en metabeschrijving. Een pagina die niet beschikbaar is in deze winkelweergave, wordt weggelaten."

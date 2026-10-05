@@ -13,7 +13,9 @@ use Magento\Store\Model\StoreManagerInterface;
 use Magento\Store\Model\Website;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
+use MageOS\Aeo\Model\LlmsTxt\PolicyPages;
 use MageOS\Aeo\Model\LlmsTxt\SitemapUrlResolver;
+use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
 use MageOS\Seo\Api\Data\OrganizationInterface;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\Config;
@@ -74,6 +76,27 @@ class LlmsTxtBuilderTest extends TestCase
 
     private ?string $sitemapUrl = 'https://shop.test/media/sitemap.xml';
 
+    /**
+     * Products listed per category ID, as the count resource model returns them.
+     *
+     * @var array<int, int>
+     */
+    private array $listed = [];
+
+    /**
+     * The store view's policy pages, as PolicyPages returns them.
+     *
+     * @var array<int, array{title: string, url: string, note: string}>
+     */
+    private array $policies = [];
+
+    /**
+     * The conditions the category collection was filtered on by level, in order.
+     *
+     * @var array<int, mixed>
+     */
+    private array $levelFilters = [];
+
     protected function setUp(): void
     {
         $store = $this->createStub(Store::class);
@@ -105,16 +128,25 @@ class LlmsTxtBuilderTest extends TestCase
 
         $this->categoryCollectionFactory = $this->createStub(CategoryCollectionFactory::class);
         $this->categoryCollectionFactory->method('create')->willReturn($this->categoryCollection([
-            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing',
-                'url_path' => 'clothing', 'product_count' => 245],
-            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => "Men's [Sale]",
-                'url_path' => 'clothing/mens-sale', 'product_count' => 0],
-            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids',
-                'url_path' => 'kids (new)', 'product_count' => 3],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
+            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => "Men's [Sale]", 'url_path' => 'clothing/mens-sale'],
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids (new)'],
             // Child of an inactive parent (5 is not in the collection): must be skipped.
-            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden',
-                'url_path' => 'hidden/child', 'product_count' => 9],
+            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden', 'url_path' => 'hidden/child'],
         ]));
+        // Category 4 lists nothing, so the count has no entry for it.
+        $this->listed = [3 => 245, 7 => 3, 6 => 9];
+    }
+
+    public function testEachCategoryShowsHowManyProductsItsPageListsInThisStoreView(): void
+    {
+        $counts = $this->createMock(CategoryProductCount::class);
+        $counts->expects($this->once())->method('countListed')->with(1, [3, 4, 7, 6])->willReturn([3 => 245]);
+
+        $document = $this->builder(categoryProductCount: $counts)->buildFull();
+
+        $this->assertStringContainsString('- [Clothing](https://shop.test/clothing.html): 245 products', $document);
+        $this->assertStringContainsString('- [Kids](https://shop.test/kids%20%28new%29.html)' . "\n", $document);
     }
 
     public function testConciseDocumentPassesLighthouseChecks(): void
@@ -196,6 +228,26 @@ class LlmsTxtBuilderTest extends TestCase
         $this->assertStringNotContainsString('Hidden', $document);
     }
 
+    public function testEachCategoryIsListedUnderItsParentInTheOrderTheyAreRead(): void
+    {
+        // Read in the menu's order: level first, then position. Kids comes first though its ID
+        // is higher, and Clothing's subcategory still goes under Clothing, after Kids.
+        $factory = $this->createStub(CategoryCollectionFactory::class);
+        $factory->method('create')->willReturn($this->categoryCollection([
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids'],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
+            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => 'Shirts', 'url_path' => 'clothing/shirts'],
+        ]));
+        $this->categoryCollectionFactory = $factory;
+
+        $this->assertStringContainsString(
+            "- [Kids](https://shop.test/kids.html): 3 products\n"
+            . "- [Clothing](https://shop.test/clothing.html): 245 products\n"
+            . "  - [Shirts](https://shop.test/clothing/shirts.html)\n",
+            $this->builder()->buildFull()
+        );
+    }
+
     public function testACategoryReadFailureIsNotSwallowed(): void
     {
         // FeedRegenerator logs a store's failed build and keeps the previous file;
@@ -256,12 +308,61 @@ class LlmsTxtBuilderTest extends TestCase
         $this->assertLlmsTxtFormat($document);
     }
 
+    public function testTheConciseDocumentListsTheTopLevelAsCategoriesAndTheFullOneTheWholeTree(): void
+    {
+        $concise = $this->builder()->buildConcise();
+        $this->assertSame('2', $this->levelFilters[0] ?? null, 'The concise document reads the top level only.');
+        $this->assertStringContainsString("## Categories\n\n- [Clothing](https://shop.test/clothing.html)", $concise);
+        $this->assertStringNotContainsString('## Category Tree', $concise);
+
+        $full = $this->builder()->buildFull();
+        $this->assertSame(['gt' => '1'], $this->levelFilters[0] ?? null);
+        $this->assertStringContainsString("## Category Tree\n\n- [Clothing]", $full);
+        $this->assertStringNotContainsString('## Categories', $full);
+    }
+
+    public function testBothDocumentsListThePolicyPagesAfterTheCategories(): void
+    {
+        $this->policies = [
+            ['title' => 'Returns policy', 'url' => 'https://shop.test/returns', 'note' => ''],
+            [
+                'title' => 'Terms [and] conditions',
+                'url'   => 'https://shop.test/terms (2026)',
+                'note'  => "Our terms.\nRead them.",
+            ],
+        ];
+
+        foreach ([$this->builder()->buildConcise(), $this->builder()->buildFull()] as $document) {
+            $this->assertStringContainsString(
+                "## Policies\n\n"
+                . "- [Returns policy](https://shop.test/returns)\n"
+                . "- [Terms (and) conditions](https://shop.test/terms%20%282026%29): Our terms. Read them.\n",
+                $document
+            );
+            $this->assertGreaterThan(strpos($document, '## Categor'), strpos($document, '## Policies'));
+            $this->assertLlmsTxtFormat($document);
+        }
+    }
+
+    public function testNoPoliciesSectionWhenTheStoreViewListsNone(): void
+    {
+        $this->assertStringNotContainsString('## Policies', $this->builder()->buildConcise());
+    }
+
     /**
      * @param LlmsTxtSectionProviderInterface[] $providers
+     * @param CategoryProductCount|null $categoryProductCount
      * @return LlmsTxtBuilder
      */
-    private function builder(array $providers = []): LlmsTxtBuilder
+    private function builder(array $providers = [], ?CategoryProductCount $categoryProductCount = null): LlmsTxtBuilder
     {
+        if ($categoryProductCount === null) {
+            $categoryProductCount = $this->createStub(CategoryProductCount::class);
+            $categoryProductCount->method('countListed')->willReturn($this->listed);
+        }
+        $policyPages = $this->createStub(PolicyPages::class);
+        $policyPages->method('entries')->willReturn($this->policies);
+        $this->levelFilters = [];
         $repository = $this->createStub(OrganizationRepositoryInterface::class);
         $repository->method('getForScope')->willReturn($this->organization);
         $seoConfig = $this->createStub(Config::class);
@@ -280,6 +381,8 @@ class LlmsTxtBuilderTest extends TestCase
             $seoConfig,
             $contactEmail,
             $sitemapResolver,
+            $categoryProductCount,
+            $policyPages,
             $providers
         );
     }
@@ -303,13 +406,25 @@ class LlmsTxtBuilderTest extends TestCase
      */
     private function categoryCollection(array $rows): CategoryCollection&Stub
     {
-        $items = array_map(static fn (array $row): DataObject => new DataObject($row), $rows);
+        // Keyed by ID, as a loaded collection's items are.
+        $items = [];
+        foreach ($rows as $row) {
+            $items[$row['id']] = new DataObject($row);
+        }
 
         $collection = $this->createStub(CategoryCollection::class);
-        $fluent = ['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addAttributeToFilter', 'setOrder'];
-        foreach ($fluent as $method) {
+        foreach (['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addOrder'] as $method) {
             $collection->method($method)->willReturnSelf();
         }
+        // The level filter is recorded: it is what keeps the concise document to the top level.
+        $collection->method('addAttributeToFilter')->willReturnCallback(
+            function (string $attribute, mixed $condition) use ($collection): CategoryCollection {
+                if ($attribute === 'level') {
+                    $this->levelFilters[] = $condition;
+                }
+                return $collection;
+            }
+        );
         $collection->method('getItems')->willReturn($items);
         $collection->method('getIterator')->willReturn(new \ArrayIterator($items));
 

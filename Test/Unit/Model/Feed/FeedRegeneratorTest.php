@@ -16,6 +16,7 @@ use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\Feed\RebuildLock;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
+use MageOS\Seo\Model\Rebuild\ProblemLog;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -68,6 +69,13 @@ class FeedRegeneratorTest extends TestCase
      * @var RebuildLock|null
      */
     private ?RebuildLock $rebuildLock = null;
+
+    /**
+     * Set only by the tests that look at what is recorded for the admin.
+     *
+     * @var ProblemLog|null
+     */
+    private ?ProblemLog $problemLog = null;
 
     /**
      * Storage and cache calls in the order they happened.
@@ -343,8 +351,131 @@ class FeedRegeneratorTest extends TestCase
             $this->feedStorage,
             $this->feedCache,
             $this->logger,
-            $this->rebuildLock ?? $this->freeRebuildLock()
+            $this->rebuildLock ?? $this->freeRebuildLock(),
+            $this->problemLog ?? $this->createStub(ProblemLog::class)
         );
+    }
+
+    public function testEachGroupsResultIsRecordedForTheAdmin(): void
+    {
+        $this->storeManager->method('getStores')->willReturn([$this->activeStore(1), $this->activeStore(2)]);
+        $this->seoConfig->method('isLlmsTxtEnabled')->willReturn(true);
+        $this->llmsTxtBuilder->method('buildConcise')->willThrowException(new \RuntimeException('build failed'));
+        $recorded = $this->recordingProblemLog();
+
+        $this->regenerator()->regenerate();
+
+        $this->assertSame(
+            [
+                'rebuilding llms',
+                'rebuilding jsonl',
+                'rebuilt llms {"1":"build failed","2":"build failed"}',
+                'rebuilt jsonl {}',
+            ],
+            $recorded->calls
+        );
+    }
+
+    public function testOneGroupFailingDoesNotStopOrBlameTheOther(): void
+    {
+        $this->storeManager->method('getStores')->willReturn([$this->activeStore()]);
+        $this->seoConfig->method('isLlmsTxtEnabled')->willReturn(true);
+        $this->seoConfig->method('isLlmsJsonlEnabled')->willReturn(true);
+        $this->llmsTxtBuilder->method('buildConcise')->willThrowException(new \RuntimeException('build failed'));
+        $this->jsonlBuilder->method('stream')->willReturnCallback(
+            static function (): \Generator {
+                yield 'lines';
+            }
+        );
+        $recorded = $this->recordingProblemLog();
+
+        $failures = $this->regenerator()->regenerate();
+
+        $this->assertContains('stream 1: lines -> llms.jsonl', $this->calls);
+        $this->assertContains('rebuilt jsonl {}', $recorded->calls);
+        $this->assertSame([1 => 'build failed'], $failures, 'The command still gets one message per store view.');
+    }
+
+    public function testAStoreViewWhoseGroupsBothFailHasOneMessageNamingBoth(): void
+    {
+        $this->storeManager->method('getStores')->willReturn([$this->activeStore(1), $this->activeStore(2)]);
+        $this->seoConfig->method('isLlmsTxtEnabled')->willReturn(true);
+        $this->seoConfig->method('isLlmsJsonlEnabled')->willReturn(true);
+        $this->llmsTxtBuilder->method('buildConcise')->willThrowException(new \RuntimeException('llms failed'));
+        $this->jsonlBuilder->method('stream')->willThrowException(new \RuntimeException('jsonl failed'));
+
+        $this->assertSame(
+            [1 => 'llms failed; jsonl failed', 2 => 'llms failed; jsonl failed'],
+            $this->regenerator()->regenerate()
+        );
+    }
+
+    public function testABuildThatThrowsIsAProblemForEveryGroupItCovered(): void
+    {
+        $storeManager = $this->createStub(StoreManagerInterface::class);
+        $storeManager->method('getStores')->willThrowException(new \RuntimeException('no stores'));
+        $this->storeManager = $storeManager;
+        $recorded           = $this->recordingProblemLog();
+
+        try {
+            $this->regenerator()->regenerate();
+            $this->fail('The exception was swallowed.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('no stores', $e->getMessage());
+        }
+
+        $this->assertSame(
+            [
+                'rebuilding llms',
+                'rebuilding jsonl',
+                'rebuilt llms {"all":"no stores"}',
+                'rebuilt jsonl {"all":"no stores"}',
+            ],
+            $recorded->calls
+        );
+    }
+
+    public function testARebuildRefusedForTheLockRecordsNothing(): void
+    {
+        $lock = $this->createStub(RebuildLock::class);
+        $lock->method('acquire')->willReturn(false);
+        $this->rebuildLock = $lock;
+        $recorded          = $this->recordingProblemLog();
+
+        try {
+            $this->regenerator()->regenerate();
+        } catch (FeedRebuildInProgressException) {
+            // Expected; what matters is that nothing was opened.
+        }
+
+        $this->assertSame([], $recorded->calls);
+    }
+
+    /**
+     * A problem log that records the brackets it is given, as "rebuilding GROUP" and
+     * "rebuilt GROUP FAILURES-AS-JSON".
+     *
+     * @return \stdClass With the calls in `calls`
+     */
+    private function recordingProblemLog(): \stdClass
+    {
+        $recorded        = new \stdClass();
+        $recorded->calls = [];
+
+        $problemLog = $this->createStub(ProblemLog::class);
+        $problemLog->method('rebuilding')->willReturnCallback(
+            static function (string $group) use ($recorded): void {
+                $recorded->calls[] = 'rebuilding ' . $group;
+            }
+        );
+        $problemLog->method('rebuilt')->willReturnCallback(
+            static function (string $group, array $failures) use ($recorded): void {
+                $recorded->calls[] = 'rebuilt ' . $group . ' ' . json_encode((object) $failures);
+            }
+        );
+        $this->problemLog = $problemLog;
+
+        return $recorded;
     }
 
     public function testNothingIsBuiltWhenAnotherProcessHoldsTheRebuildLock(): void

@@ -142,16 +142,24 @@ class FeedInvalidationRulesTest extends TestCase
     }
 
     /**
-     * No feed lists CMS pages.
+     * The llms documents list the CMS pages chosen under Pages Listed in llms.txt, by title, URL
+     * and meta description; llms.jsonl lists none.
      *
      * @return void
      */
-    public function testCmsPageSavesQueueNoFeed(): void
+    public function testCmsPageSavesAndDeletionsQueueLlms(): void
     {
         $pageId = $this->createPage();
 
-        $this->assertQueuedBy([], fn () => $this->savePage($pageId, ['title' => 'Renamed page']));
-        $this->assertQueuedBy([], fn () => $this->savePage($pageId, ['identifier' => 'renamed-page-' . uniqid()]));
+        $this->assertQueuedBy(['llms'], fn () => $this->savePage($pageId, ['title' => 'Renamed page']));
+        $this->assertQueuedBy(
+            ['llms'],
+            fn () => $this->savePage($pageId, ['identifier' => 'renamed-page-' . uniqid()])
+        );
+        $this->assertQueuedBy(
+            ['llms'],
+            fn () => Bootstrap::getObjectManager()->get(PageRepositoryInterface::class)->deleteById($pageId)
+        );
     }
 
     /**

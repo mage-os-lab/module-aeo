@@ -20,6 +20,7 @@ class Config
     public const XML_LLMS_FULL_ENABLED    = 'mageos_aeo/llms_txt/full_enabled';
     public const XML_LLMS_JSONL_ENABLED   = 'mageos_aeo/llms_txt/jsonl_enabled';
     public const XML_LLMS_FAQ_GROUPS      = 'mageos_aeo/llms_txt/faq_groups';
+    public const XML_LLMS_POLICY_PAGES    = 'mageos_aeo/llms_txt/policy_pages';
     public const XML_FEEDS_STORAGE_DIR    = 'mageos_aeo/feeds/storage_dir';
     public const XML_AI_ROBOTS_ENABLED    = 'mageos_aeo/ai_robots/enabled';
     public const XML_AI_ROBOTS_DISALLOWED = 'mageos_aeo/ai_robots/disallowed';
@@ -96,6 +97,29 @@ class Config
         return array_values(array_filter(
             array_map('trim', explode(',', $raw)),
             static fn (string $group): bool => $group !== ''
+        ));
+    }
+
+    /**
+     * Return the CMS pages listed under Policies in /llms.txt and /llms-full.txt, in order.
+     *
+     * Each is a value of core's CMS page source: the page identifier, with `|ID` added when another
+     * page has the same one. None selected is an empty list.
+     *
+     * @param int $storeId
+     * @return string[]
+     */
+    public function getLlmsPolicyPages(int $storeId): array
+    {
+        $raw = (string) $this->scopeConfig->getValue(
+            self::XML_LLMS_POLICY_PAGES,
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+
+        return array_values(array_filter(
+            array_map('trim', explode(',', $raw)),
+            static fn (string $page): bool => $page !== ''
         ));
     }
 

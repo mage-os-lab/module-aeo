@@ -11,6 +11,7 @@ use Magento\Framework\Filesystem\Directory\ReadInterface;
 use Magento\Framework\Filesystem\Directory\WriteFactory;
 use Magento\Framework\Filesystem\Directory\WriteInterface;
 use MageOS\Aeo\Model\Config;
+use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -45,6 +46,7 @@ class FeedStorage
      * @param Config $aeoConfig
      * @param StorageDirectory $storageDirectory
      * @param LoggerInterface $logger
+     * @param ProblemLog $problemLog Injected as a proxy: storefront reads never need it
      */
     public function __construct(
         private readonly Filesystem       $filesystem,
@@ -52,7 +54,8 @@ class FeedStorage
         private readonly ReadFactory      $readFactory,
         private readonly Config           $aeoConfig,
         private readonly StorageDirectory $storageDirectory,
-        private readonly LoggerInterface  $logger
+        private readonly LoggerInterface  $logger,
+        private readonly ProblemLog       $problemLog
     ) {
     }
 
@@ -62,7 +65,8 @@ class FeedStorage
      * The admin field is validated on save, but a configuration row can arrive another way — a
      * data patch, a deployment tool, a direct database write — so the value is checked again here,
      * where it turns into a directory handle. Refusing it falls back to var/mageos_aeo rather than
-     * failing: the feeds keep working, in the one place every installation can write.
+     * failing: the feeds keep working, in the one place every installation can write. A rebuild
+     * that falls back is shown to the admin as incomplete until the setting is fixed.
      *
      * @return string
      */
@@ -77,6 +81,10 @@ class FeedStorage
             'MageOS_Aeo: the configured feed storage directory is not permitted and was ignored;'
             . ' falling back to var/mageos_aeo.',
             ['storage_dir' => $configured]
+        );
+        // On a multi-server install the web servers may not see var/ of the host that rebuilds.
+        $this->problemLog->degradedWhileRebuilding(
+            __('The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.')
         );
 
         return '';

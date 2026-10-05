@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace MageOS\Aeo\Model\LlmsTxt;
 
+use Magento\Catalog\Model\ResourceModel\Category\Collection as CategoryCollection;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
+use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\Config;
 use MageOS\Seo\Model\Organization\ContactEmail;
@@ -82,6 +84,8 @@ class LlmsTxtBuilder
      * @param Config $seoConfig
      * @param ContactEmail $contactEmail
      * @param SitemapUrlResolver $sitemapUrlResolver
+     * @param CategoryProductCount $categoryProductCount
+     * @param PolicyPages $policyPages
      * @param \MageOS\Aeo\Api\LlmsTxtSectionProviderInterface[] $sectionProviders
      */
     public function __construct(
@@ -93,6 +97,8 @@ class LlmsTxtBuilder
         private readonly Config                          $seoConfig,
         private readonly ContactEmail                    $contactEmail,
         private readonly SitemapUrlResolver              $sitemapUrlResolver,
+        private readonly CategoryProductCount            $categoryProductCount,
+        private readonly PolicyPages                     $policyPages,
         private readonly array                           $sectionProviders = []
     ) {
     }
@@ -178,11 +184,14 @@ class LlmsTxtBuilder
         }
         $blocks[] = implode("\n", $keyUrls);
 
-        if ($full) {
-            $categories = $this->buildCategorySection($baseUrl);
-            if ($categories !== '') {
-                $blocks[] = $categories;
-            }
+        $categories = $this->buildCategorySection($baseUrl, $full);
+        if ($categories !== '') {
+            $blocks[] = $categories;
+        }
+
+        $policies = $this->buildPolicySection($storeId, $baseUrl);
+        if ($policies !== '') {
+            $blocks[] = $policies;
         }
 
         foreach ($providerSections as $section) {
@@ -269,16 +278,21 @@ class LlmsTxtBuilder
     }
 
     /**
-     * Build the category tree section for the current store's tree only.
+     * Build the category section for the current store's tree only.
      *
-     * Returns '' when the store has no visible categories. A failure to read them is
-     * not caught: FeedRegenerator logs the store's failed build and keeps the previous
-     * file, which is better than publishing a file without its category tree.
+     * The tree is the storefront menu's (Catalog\Plugin\Block\Topmenu): active categories with
+     * Include in Menu, in the menu's order. /llms-full.txt lists every level as its Category Tree:
+     * unlike the menu, it is not cut at the configured navigation depth, since every level is a
+     * page. /llms.txt lists the top level only, as Categories. Returns '' when the store has no
+     * visible categories. A failure to read them is not caught: FeedRegenerator logs the store's
+     * failed build and keeps the previous file, which is better than publishing a file without its
+     * categories.
      *
      * @param string $baseUrl
+     * @param bool $full
      * @return string
      */
-    private function buildCategorySection(string $baseUrl): string
+    private function buildCategorySection(string $baseUrl, bool $full): string
     {
         $items = [];
 
@@ -295,12 +309,16 @@ class LlmsTxtBuilder
             ->addAttributeToSelect(['name', 'url_path', 'is_active'])
             ->addPathsFilter(['1/' . $rootId . '/'])
             ->addAttributeToFilter('is_active', (string) 1)
-            ->addAttributeToFilter('level', ['gt' => 1])
-            ->setOrder('path', 'ASC');
+            ->addAttributeToFilter('include_in_menu', (string) 1)
+            // Level 2 is the top level: the store's root category is level 1.
+            ->addAttributeToFilter('level', $full ? ['gt' => '1'] : '2');
+        // The menu's order: by position among siblings, ties by parent and ID, as core sorts it.
+        foreach (['level', 'position', 'parent_id', 'entity_id'] as $field) {
+            $collection->addOrder($field, CategoryCollection::SORT_ORDER_ASC);
+        }
 
-        // One grouped query for all product counts. Direct assignment counts only:
-        // anchor roll-up counts cost one query per category.
-        $collection->loadProductCount($collection->getItems(), true, false);
+        // What each category page lists, an anchor's subcategories included: one query.
+        $counts = $this->categoryProductCount->countListed($storeId, array_keys($collection->getItems()));
 
         $urlSuffix = (string) $this->scopeConfig->getValue(
             'catalog/seo/category_url_suffix',
@@ -308,15 +326,20 @@ class LlmsTxtBuilder
             $storeId
         );
 
-        // Children of a disabled subtree are individually still is_active=1, so
-        // only emit categories whose full ancestor chain has been emitted.
-        $visible = [$rootId => true];
+        $children = [];
         foreach ($collection as $category) {
-            $parentId = (int) $category->getParentId();
-            if (!isset($visible[$parentId])) {
-                continue;
+            $children[(int) $category->getParentId()][] = $category;
+        }
+
+        // Depth first from the root, so a category is listed only under a listed parent: one
+        // that is disabled or left out of the menu takes its subcategories with it, though each
+        // of them is still active and in the menu itself.
+        $pending = array_reverse($children[$rootId] ?? []);
+        while ($pending !== []) {
+            $category = array_pop($pending);
+            foreach (array_reverse($children[(int) $category->getId()] ?? []) as $child) {
+                $pending[] = $child;
             }
-            $visible[(int) $category->getId()] = true;
 
             $level  = max(0, (int) $category->getLevel() - 2);
             $indent = str_repeat('  ', $level);
@@ -325,7 +348,7 @@ class LlmsTxtBuilder
                 self::URL_REPLACEMENTS
             );
             $label  = $this->linkLabel((string) $category->getName());
-            $count  = (int) $category->getProductCount();
+            $count  = $counts[(int) $category->getId()] ?? 0;
             $note   = $count > 0 ? ': ' . __('%1 products', $count) : '';
             $items[] = "{$indent}- [{$label}]({$url}){$note}";
         }
@@ -334,7 +357,33 @@ class LlmsTxtBuilder
             return '';
         }
 
-        return implode("\n", array_merge(['## ' . __('Category Tree'), ''], $items));
+        return implode("\n", array_merge(['## ' . ($full ? __('Category Tree') : __('Categories')), ''], $items));
+    }
+
+    /**
+     * Build the Policies section: the returns policy and the chosen CMS pages (PolicyPages).
+     *
+     * Returns '' when the store view lists none.
+     *
+     * @param int $storeId
+     * @param string $baseUrl
+     * @return string
+     */
+    private function buildPolicySection(int $storeId, string $baseUrl): string
+    {
+        $items = [];
+        foreach ($this->policyPages->entries($storeId, $baseUrl) as $entry) {
+            $note    = $this->oneLine($entry['note']);
+            $items[] = '- [' . $this->linkLabel($entry['title']) . ']('
+                . strtr($entry['url'], self::URL_REPLACEMENTS) . ')'
+                . ($note !== '' ? ': ' . $note : '');
+        }
+
+        if ($items === []) {
+            return '';
+        }
+
+        return implode("\n", array_merge(['## ' . __('Policies'), ''], $items));
     }
 
     /**
