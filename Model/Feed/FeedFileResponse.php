@@ -17,9 +17,10 @@ use Magento\Framework\App\Response\Http;
  * again by path, after FeedStorage has checked it.
  *
  * Not cacheable by the built-in full page cache, which keeps a response as one string — the memory
- * this response exists to save. That cache still rewrites the response to no-cache headers, so
- * under it a large feed is read from disk for every request. Varnish caches it by its headers like
- * any other feed.
+ * this response exists to save. Core's FrontController\BuiltinPlugin leaves a NotCacheableInterface
+ * response alone altogether, so its headers reach the client as set: browsers keep it for
+ * FeedCache's browser lifetime, and the server reads it from disk for each request that gets
+ * through. Varnish caches it by its headers like any other feed.
  */
 class FeedFileResponse extends Http implements NotCacheableInterface
 {

@@ -38,6 +38,8 @@ before 2026-10-02. Its history up to then is kept in that repository.
   into a string, so one larger than `memory_limit` ended the request with a fatal error. A feed
   over 0.5 MiB is now sent from its file, 4 KiB at a time. Smaller ones are answered from memory as
   before, so the built-in full page cache still stores them; it does not store a streamed one.
+  Checked with `memory_limit` at 64M: a 200 MiB feed was served whole, each request peaking at
+  16–26 MB.
 - **Configuration changes reach both feeds, once committed**
   ([#4](https://github.com/mage-os-lab/module-aeo/issues/4)).
   - Switching a document on or off — at any scope, or with "Use Default" — removes its files for
@@ -51,8 +53,19 @@ before 2026-10-02. Its history up to then is kept in that repository.
   - The work waits for the commit and reads no configuration: during a save the configuration in
     memory is still the old one, so asking whether a feed was enabled gave the old answer.
 
+- **Rebuilds wait for the commit, and use current data**
+  ([#8](https://github.com/mage-os-lab/module-aeo/issues/8),
+  [#9](https://github.com/mage-os-lab/module-aeo/issues/9)). Fixed in MageOS_Seo 1.2.2, whose
+  rebuild queue these documents use.
+  - A save's rebuild is queued once the save commits, so an AMQP consumer can no longer build from
+    the data before it.
+  - A long-running consumer resets the Organization, stock IDs and, after a configuration change,
+    the configuration before each build.
+  - Indexer lag is documented: see `docs/feeds.md`, "When a rebuild runs".
+
 ### Changed
 
+- Requires MageOS_Seo `^1.2.2`.
 - Browsers keep a feed for 5 minutes: `Cache-Control: public, max-age=300, s-maxage=86400`.
   Shared caches still keep it for 24 hours and are purged by tag; a browser's copy cannot be.
 - The configuration observers are `mageos_aeo_refresh_feeds_on_config_save` and

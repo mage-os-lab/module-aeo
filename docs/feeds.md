@@ -73,6 +73,20 @@ rebuild through at a time:
 Nothing needs configuring for this. The lock uses whichever lock provider the installation
 already has (database by default; Zookeeper, Redis or the filesystem if configured).
 
+### When a rebuild runs
+
+The queue is MageOS_Seo's, and so are its rules; see its
+[sitemap.md, "When a rebuild runs"](https://github.com/mage-os-lab/module-seo/blob/main/docs/sitemap.md#when-a-rebuild-runs).
+In short:
+- a change is queued once the save that made it commits, so AMQP consumers never build from the
+  data before it;
+- each build starts from current data (the Organization, stock, configuration), however long the
+  consumer has run;
+- a consumer waits for a rebuild another process is running rather than spinning;
+- with indexers on Update by Schedule, a rebuild can still run before the indexers catch up, and
+  `/llms.jsonl` then shows the price or stock from before. The next change, or the nightly
+  rebuild, catches up.
+
 ### Queue transport
 
 The rebuild queue is MageOS_Seo's, shared with the sitemaps. Its `etc/queue_consumer.xml`,
@@ -112,8 +126,14 @@ time: serving it takes the same memory whatever its size, and a feed larger than
 `Content-Length`, and a `HEAD` request gets the headers only.
 
 The built-in full page cache does not store a streamed feed. It keeps a response as one string,
-which is the memory streaming saves, so with it a large feed is read from disk on every request.
-Varnish and CDNs cache it by its headers, like the smaller ones.
+which is the memory streaming saves, so with it a large feed is read from disk for every request
+that reaches Magento. It also leaves the response's headers alone, so browsers keep a streamed
+feed for 5 minutes under either cache. Varnish and CDNs cache it by its headers, like the smaller
+ones.
+
+Measured on the test installation with PHP's `memory_limit` lowered to 64M: a 200 MiB
+`/llms.jsonl` was served whole, three requests at once included, with each request peaking at
+16–26 MB, under both cache settings.
 
 ---
 

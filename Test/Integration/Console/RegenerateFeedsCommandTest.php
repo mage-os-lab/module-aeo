@@ -10,6 +10,7 @@ use Magento\Framework\Setup\ModuleDataSetupInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
 use MageOS\Seo\Console\Command\RegenerateFeedsCommand;
 use MageOS\Seo\Setup\RecurringData;
 use PHPUnit\Framework\TestCase;
@@ -26,6 +27,8 @@ use Symfony\Component\Console\Tester\CommandTester;
  */
 class RegenerateFeedsCommandTest extends TestCase
 {
+    use CommitsDeferredRequests;
+
     /**
      * Start without the documents.
      *
@@ -82,6 +85,8 @@ class RegenerateFeedsCommandTest extends TestCase
         );
 
         // Default configuration on a single store view: only llms.txt / llms-full.txt can be built.
+        // The requests wait for a commit the test's transaction never makes.
+        $this->commitDeferredRequests();
         $this->assertIsNumeric($flags->getFlagData('mageos_seo_feed_pending_llms'));
         $this->assertNull($flags->getFlagData('mageos_seo_feed_pending_jsonl'));
         $this->assertNull($flags->getFlagData('mageos_seo_feed_pending_hreflang'));
