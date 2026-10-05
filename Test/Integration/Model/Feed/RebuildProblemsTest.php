@@ -6,11 +6,13 @@ namespace MageOS\Aeo\Test\Integration\Model\Feed;
 
 use Magento\Catalog\Test\Fixture\Product as ProductFixture;
 use Magento\Framework\FlagManager;
+use Magento\Framework\Notification\NotifierInterface;
 use Magento\Framework\Stdlib\DateTime\TimezoneInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Fixture\DataFixture;
+use Magento\TestFramework\Fixture\DataFixtureStorageManager;
 use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
@@ -25,11 +27,24 @@ use PHPUnit\Framework\TestCase;
  * The llms documents' rebuild problems reach the admin: by their file names, retried by the
  * nightly cron, and an incomplete llms.jsonl says why.
  *
+ * Database isolation is off so the fixture product's save commits and the price index lists it:
+ * llms.jsonl only has the products the index has, and the stock lookup only runs for a page with
+ * products in it. With isolation on, the test passed only where the database already held a
+ * catalogue (sample data) and failed on CI's empty one. Nothing is rolled back, so the test keeps
+ * its own problem log, with no inbox, and removes the flag and files it wrote.
+ *
  * @magentoAppArea adminhtml
- * @magentoDbIsolation enabled
+ * @magentoDbIsolation disabled
  */
 class RebuildProblemsTest extends TestCase
 {
+    /**
+     * The problem log of the running test.
+     *
+     * @var ProblemLog|null
+     */
+    private ?ProblemLog $problemLog = null;
+
     /**
      * @return void
      */
@@ -39,7 +54,7 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * Remove the feed files the tests wrote; the storage directory is not rolled back.
+     * Remove the feed files and the problems the tests wrote.
      *
      * @return void
      */
@@ -48,6 +63,8 @@ class RebuildProblemsTest extends TestCase
         $storage = Bootstrap::getObjectManager()->get(FeedStorage::class);
         $storage->deleteForStore('llms*', $this->storeId());
         $storage->deleteForStore('.*.tmp', $this->storeId());
+        Bootstrap::getObjectManager()->get(FlagManager::class)->deleteFlag(ProblemLog::FLAG);
+        $this->problemLog = null;
     }
 
     /**
@@ -83,6 +100,14 @@ class RebuildProblemsTest extends TestCase
 
         $this->regeneratorWith($failing)->regenerate(FeedRegenerator::GROUP_JSONL);
 
+        // The lookup only runs for a page with products in it: the fixture must have been listed,
+        // whatever else the database holds.
+        $sku = (string) DataFixtureStorageManager::getStorage()->get('product')->getSku();
+        $this->assertStringContainsString(
+            '"sku":"' . $sku . '"',
+            (string) Bootstrap::getObjectManager()->get(FeedStorage::class)->read('llms.jsonl', $this->storeId())
+        );
+
         $problems = $this->problemLog()->all();
         $this->assertSame(ProblemLog::KIND_DEGRADED, $problems['jsonl'][$this->storeId()]['kind'] ?? null);
 
@@ -95,7 +120,8 @@ class RebuildProblemsTest extends TestCase
             $line
         );
 
-        Bootstrap::getObjectManager()->create(FeedRegenerator::class)->regenerate(FeedRegenerator::GROUP_JSONL);
+        Bootstrap::getObjectManager()->create(FeedRegenerator::class, ['problemLog' => $this->problemLog()])
+            ->regenerate(FeedRegenerator::GROUP_JSONL);
 
         $this->assertArrayNotHasKey('jsonl', $this->problemLog()->all());
     }
@@ -103,23 +129,36 @@ class RebuildProblemsTest extends TestCase
     /**
      * A regenerator whose llms.jsonl builder reads salability from the given lookup.
      *
+     * Builder and regenerator share the test's problem log: a degradation is only recorded inside
+     * the rebuild the same log has open.
+     *
      * @param StockIndexSalability $salability
      * @return FeedRegenerator
      */
     private function regeneratorWith(StockIndexSalability $salability): FeedRegenerator
     {
         $objectManager = Bootstrap::getObjectManager();
-        $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, ['stockIndexSalability' => $salability]);
+        $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, [
+            'stockIndexSalability' => $salability,
+            'problemLog'           => $this->problemLog(),
+        ]);
 
-        return $objectManager->create(FeedRegenerator::class, ['jsonlBuilder' => $jsonlBuilder]);
+        return $objectManager->create(FeedRegenerator::class, [
+            'jsonlBuilder' => $jsonlBuilder,
+            'problemLog'   => $this->problemLog(),
+        ]);
     }
 
     /**
+     * The test's problem log: the real one, with an inbox that keeps nothing.
+     *
      * @return ProblemLog
      */
     private function problemLog(): ProblemLog
     {
-        return Bootstrap::getObjectManager()->get(ProblemLog::class);
+        return $this->problemLog ??= Bootstrap::getObjectManager()->create(ProblemLog::class, [
+            'notifier' => $this->createStub(NotifierInterface::class),
+        ]);
     }
 
     /**
