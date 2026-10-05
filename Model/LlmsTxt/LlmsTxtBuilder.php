@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MageOS\Aeo\Model\LlmsTxt;
 
+use Magento\Catalog\Model\ResourceModel\Category\Collection as CategoryCollection;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
@@ -274,9 +275,12 @@ class LlmsTxtBuilder
     /**
      * Build the category tree section for the current store's tree only.
      *
-     * Returns '' when the store has no visible categories. A failure to read them is
-     * not caught: FeedRegenerator logs the store's failed build and keeps the previous
-     * file, which is better than publishing a file without its category tree.
+     * The tree is the storefront menu's (Catalog\Plugin\Block\Topmenu): active categories with
+     * Include in Menu, in the menu's order. Unlike the menu, it is not cut at the configured
+     * navigation depth: every level is a page. Returns '' when the store has no visible
+     * categories. A failure to read them is not caught: FeedRegenerator logs the store's failed
+     * build and keeps the previous file, which is better than publishing a file without its
+     * category tree.
      *
      * @param string $baseUrl
      * @return string
@@ -298,8 +302,12 @@ class LlmsTxtBuilder
             ->addAttributeToSelect(['name', 'url_path', 'is_active'])
             ->addPathsFilter(['1/' . $rootId . '/'])
             ->addAttributeToFilter('is_active', (string) 1)
-            ->addAttributeToFilter('level', ['gt' => 1])
-            ->setOrder('path', 'ASC');
+            ->addAttributeToFilter('include_in_menu', (string) 1)
+            ->addAttributeToFilter('level', ['gt' => 1]);
+        // The menu's order: by position among siblings, ties by parent and ID, as core sorts it.
+        foreach (['level', 'position', 'parent_id', 'entity_id'] as $field) {
+            $collection->addOrder($field, CategoryCollection::SORT_ORDER_ASC);
+        }
 
         // What each category page lists, an anchor's subcategories included: one query.
         $counts = $this->categoryProductCount->countListed($storeId, array_keys($collection->getItems()));
@@ -310,15 +318,20 @@ class LlmsTxtBuilder
             $storeId
         );
 
-        // Children of a disabled subtree are individually still is_active=1, so
-        // only emit categories whose full ancestor chain has been emitted.
-        $visible = [$rootId => true];
+        $children = [];
         foreach ($collection as $category) {
-            $parentId = (int) $category->getParentId();
-            if (!isset($visible[$parentId])) {
-                continue;
+            $children[(int) $category->getParentId()][] = $category;
+        }
+
+        // Depth first from the root, so a category is listed only under a listed parent: one
+        // that is disabled or left out of the menu takes its subcategories with it, though each
+        // of them is still active and in the menu itself.
+        $pending = array_reverse($children[$rootId] ?? []);
+        while ($pending !== []) {
+            $category = array_pop($pending);
+            foreach (array_reverse($children[(int) $category->getId()] ?? []) as $child) {
+                $pending[] = $child;
             }
-            $visible[(int) $category->getId()] = true;
 
             $level  = max(0, (int) $category->getLevel() - 2);
             $indent = str_repeat('  ', $level);

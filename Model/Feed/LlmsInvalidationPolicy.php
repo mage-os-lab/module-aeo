@@ -120,10 +120,11 @@ class LlmsInvalidationPolicy
     /**
      * Decide whether a change affects llms.txt / llms-full.txt.
      *
-     * The documents show product counts per category. Core counts the category's product links
-     * joined to catalog_product_website for the store's website, so a product save matters for a
-     * new product, changed category assignments and changed website assignments — but not for
-     * attribute values, which the documents never show.
+     * The documents show how many products each category page lists (CategoryProductCount), so a
+     * product save matters for a new product, changed category assignments and changed website
+     * assignments. A changed status or visibility changes a count too, but is left to the nightly
+     * rebuild: queuing both documents for every enable or disable is not worth an informational
+     * number. Attribute values are never shown.
      *
      * Configuration matters when a value the documents show changed (LLMS_CONFIG_PREFIXES).
      *

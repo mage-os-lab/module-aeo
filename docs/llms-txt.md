@@ -101,6 +101,11 @@ Everything in `/llms.txt`, plus:
   - [Men's](https://example.com/clothing/mens.html): 97 products
 ```
 
+The tree is the storefront menu's: active categories with **Include in Menu** set, in the menu's
+order. A category left out of the menu is left out with its subcategories. Unlike the menu, every
+level is listed: **Maximal Depth** (Catalog → Catalog → Category Top Navigation) limits the menu's
+dropdowns, and every level below it is still a page.
+
 A count is the number of products the category's page lists: enabled, in the store view's website
 and visible in *Catalog* or *Catalog, Search*. An anchor category's count includes its
 subcategories' products, as its page does. A category that lists nothing has no count. The counts

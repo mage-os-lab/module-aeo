@@ -119,6 +119,11 @@ before 2026-10-02. Its history up to then is kept in that repository.
   - Stock is not taken into account (the index has none), and the counts are as current as the
     index. See `docs/llms-txt.md`.
   - `LlmsTxtBuilder`'s constructor takes `CategoryProductCount` before `sectionProviders`.
+- **The category tree in `/llms-full.txt` follows the storefront menu.** A category left out of the
+  menu (Include in Menu at No) was listed; it is now left out with its subcategories. Siblings came
+  in category ID order (Luma's top level read Men, Women, Gear, Sale, What's New…); they now come in
+  the menu's order (What's New, Women, Men, Gear…). Every level is still listed, whatever the
+  menu's Maximal Depth.
 - **A `/llms.jsonl` line whose price is not known leaves the price out, instead of `0.00`,** which
   reads as free.
   - The offer keeps its availability and URL, without `price` and `priceCurrency`.

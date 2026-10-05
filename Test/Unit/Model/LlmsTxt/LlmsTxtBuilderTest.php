@@ -213,6 +213,26 @@ class LlmsTxtBuilderTest extends TestCase
         $this->assertStringNotContainsString('Hidden', $document);
     }
 
+    public function testEachCategoryIsListedUnderItsParentInTheOrderTheyAreRead(): void
+    {
+        // Read in the menu's order: level first, then position. Kids comes first though its ID
+        // is higher, and Clothing's subcategory still goes under Clothing, after Kids.
+        $factory = $this->createStub(CategoryCollectionFactory::class);
+        $factory->method('create')->willReturn($this->categoryCollection([
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids'],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
+            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => 'Shirts', 'url_path' => 'clothing/shirts'],
+        ]));
+        $this->categoryCollectionFactory = $factory;
+
+        $this->assertStringContainsString(
+            "- [Kids](https://shop.test/kids.html): 3 products\n"
+            . "- [Clothing](https://shop.test/clothing.html): 245 products\n"
+            . "  - [Shirts](https://shop.test/clothing/shirts.html)\n",
+            $this->builder()->buildFull()
+        );
+    }
+
     public function testACategoryReadFailureIsNotSwallowed(): void
     {
         // FeedRegenerator logs a store's failed build and keeps the previous file;
@@ -333,7 +353,7 @@ class LlmsTxtBuilderTest extends TestCase
         }
 
         $collection = $this->createStub(CategoryCollection::class);
-        $fluent = ['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addAttributeToFilter', 'setOrder'];
+        $fluent = ['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addAttributeToFilter', 'addOrder'];
         foreach ($fluent as $method) {
             $collection->method($method)->willReturnSelf();
         }
