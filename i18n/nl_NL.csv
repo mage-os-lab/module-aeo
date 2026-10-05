@@ -57,3 +57,10 @@ Crawlers not selected keep following your standard ""User-agent: *"" rules.","Vo
 "Feed %1","Feed %1"
 "The stock lookup failed, so some products are listed as out of stock.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld als niet op voorraad."
 "The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","De ingestelde opslagmap is niet toegestaan, dus de bestanden staan in plaats daarvan in var/mageos_aeo."
+Categories,Categorieën
+Policies,Beleid
+"Returns policy",Retourbeleid
+"Pages Listed in llms.txt","Pagina's in llms.txt"
+"CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
+Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
+its meta description. A page not available in this store view is left out.","CMS-pagina's die onder Beleid in /llms.txt en /llms-full.txt staan, na de URL retourbeleid (SEO-verkoopbeleid): privacy, voorwaarden, verzending, over ons. Elke pagina staat er met haar titel en metabeschrijving. Een pagina die niet beschikbaar is in deze winkelweergave, wordt weggelaten."

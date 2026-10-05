@@ -85,6 +85,7 @@ class LlmsTxtBuilder
      * @param ContactEmail $contactEmail
      * @param SitemapUrlResolver $sitemapUrlResolver
      * @param CategoryProductCount $categoryProductCount
+     * @param PolicyPages $policyPages
      * @param \MageOS\Aeo\Api\LlmsTxtSectionProviderInterface[] $sectionProviders
      */
     public function __construct(
@@ -97,6 +98,7 @@ class LlmsTxtBuilder
         private readonly ContactEmail                    $contactEmail,
         private readonly SitemapUrlResolver              $sitemapUrlResolver,
         private readonly CategoryProductCount            $categoryProductCount,
+        private readonly PolicyPages                     $policyPages,
         private readonly array                           $sectionProviders = []
     ) {
     }
@@ -182,11 +184,14 @@ class LlmsTxtBuilder
         }
         $blocks[] = implode("\n", $keyUrls);
 
-        if ($full) {
-            $categories = $this->buildCategorySection($baseUrl);
-            if ($categories !== '') {
-                $blocks[] = $categories;
-            }
+        $categories = $this->buildCategorySection($baseUrl, $full);
+        if ($categories !== '') {
+            $blocks[] = $categories;
+        }
+
+        $policies = $this->buildPolicySection($storeId, $baseUrl);
+        if ($policies !== '') {
+            $blocks[] = $policies;
         }
 
         foreach ($providerSections as $section) {
@@ -273,19 +278,21 @@ class LlmsTxtBuilder
     }
 
     /**
-     * Build the category tree section for the current store's tree only.
+     * Build the category section for the current store's tree only.
      *
      * The tree is the storefront menu's (Catalog\Plugin\Block\Topmenu): active categories with
-     * Include in Menu, in the menu's order. Unlike the menu, it is not cut at the configured
-     * navigation depth: every level is a page. Returns '' when the store has no visible
-     * categories. A failure to read them is not caught: FeedRegenerator logs the store's failed
-     * build and keeps the previous file, which is better than publishing a file without its
-     * category tree.
+     * Include in Menu, in the menu's order. /llms-full.txt lists every level as its Category Tree:
+     * unlike the menu, it is not cut at the configured navigation depth, since every level is a
+     * page. /llms.txt lists the top level only, as Categories. Returns '' when the store has no
+     * visible categories. A failure to read them is not caught: FeedRegenerator logs the store's
+     * failed build and keeps the previous file, which is better than publishing a file without its
+     * categories.
      *
      * @param string $baseUrl
+     * @param bool $full
      * @return string
      */
-    private function buildCategorySection(string $baseUrl): string
+    private function buildCategorySection(string $baseUrl, bool $full): string
     {
         $items = [];
 
@@ -303,7 +310,8 @@ class LlmsTxtBuilder
             ->addPathsFilter(['1/' . $rootId . '/'])
             ->addAttributeToFilter('is_active', (string) 1)
             ->addAttributeToFilter('include_in_menu', (string) 1)
-            ->addAttributeToFilter('level', ['gt' => 1]);
+            // Level 2 is the top level: the store's root category is level 1.
+            ->addAttributeToFilter('level', $full ? ['gt' => '1'] : '2');
         // The menu's order: by position among siblings, ties by parent and ID, as core sorts it.
         foreach (['level', 'position', 'parent_id', 'entity_id'] as $field) {
             $collection->addOrder($field, CategoryCollection::SORT_ORDER_ASC);
@@ -349,7 +357,33 @@ class LlmsTxtBuilder
             return '';
         }
 
-        return implode("\n", array_merge(['## ' . __('Category Tree'), ''], $items));
+        return implode("\n", array_merge(['## ' . ($full ? __('Category Tree') : __('Categories')), ''], $items));
+    }
+
+    /**
+     * Build the Policies section: the returns policy and the chosen CMS pages (PolicyPages).
+     *
+     * Returns '' when the store view lists none.
+     *
+     * @param int $storeId
+     * @param string $baseUrl
+     * @return string
+     */
+    private function buildPolicySection(int $storeId, string $baseUrl): string
+    {
+        $items = [];
+        foreach ($this->policyPages->entries($storeId, $baseUrl) as $entry) {
+            $note    = $this->oneLine($entry['note']);
+            $items[] = '- [' . $this->linkLabel($entry['title']) . ']('
+                . strtr($entry['url'], self::URL_REPLACEMENTS) . ')'
+                . ($note !== '' ? ': ' . $note : '');
+        }
+
+        if ($items === []) {
+            return '';
+        }
+
+        return implode("\n", array_merge(['## ' . __('Policies'), ''], $items));
     }
 
     /**

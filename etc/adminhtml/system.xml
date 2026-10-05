@@ -40,6 +40,15 @@ line) at /llms.jsonl. Off by default.</comment>
                     <source_model>MageOS\Aeo\Model\Config\Source\FaqGroups</source_model>
                     <can_be_empty>1</can_be_empty>
                 </field>
+                <field id="policy_pages" translate="label comment" type="multiselect"
+                       sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Pages Listed in llms.txt</label>
+                    <comment>CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
+Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
+its meta description. A page not available in this store view is left out.</comment>
+                    <source_model>Magento\Cms\Model\Config\Source\Page</source_model>
+                    <can_be_empty>1</can_be_empty>
+                </field>
             </group>
 
             <group id="feeds" translate="label" type="text" sortOrder="20"

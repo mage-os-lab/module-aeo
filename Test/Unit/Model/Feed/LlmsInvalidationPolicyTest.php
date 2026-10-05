@@ -223,11 +223,18 @@ class LlmsInvalidationPolicyTest extends TestCase
             'general/locale/code',
             'trans_email/ident_support/email',
             'mageos_aeo/llms_txt/faq_groups',
+            'mageos_aeo/llms_txt/policy_pages',
             'web/unsecure/base_url',
             'catalog/seo/category_url_suffix',
+            'mageos_seo_merchant/return/policy_url',
+            'mageos_seo_merchant/return/enabled',
         ] as $path) {
             $this->assertTrue($relevant('config_data_save_after', $path, true), $path);
         }
+        $this->assertFalse(
+            $relevant('config_data_save_after', 'mageos_seo_merchant/shipping/enabled', true),
+            'Only the return policy appears in the documents.'
+        );
         $this->assertFalse(
             $relevant('config_data_save_after', 'mageos_seo_general/llms_txt/faq_groups', true),
             'The llms settings moved to mageos_aeo; the old path is read by nothing.'

@@ -51,6 +51,18 @@ before 2026-10-02. Its history up to then is kept in that repository.
   own headings and labels are written in each store view's language.
 - **`@api` on every interface under `Api/`**, which marks the module's contract, and a unit test
   that fails if an interface there lacks it.
+- **`/llms.txt` lists the store's categories and policies.** llms.txt v2 names "a business
+  outlining its structure and policies" as a use case; the document had only Home and the sitemap.
+  - `## Categories`: the storefront menu's top level, in its order, with product counts.
+    `/llms-full.txt` keeps its whole Category Tree instead.
+  - `## Policies`, in both documents: the Returns Policy URL (MageOS_Seo's SEO Merchant Policies,
+    while the return policy is on), then the CMS pages chosen under the new **Pages Listed in
+    llms.txt** (`mageos_aeo/llms_txt/policy_pages`, per store view), by title with the meta
+    description as a note. A chosen page not active in the store view is left out and logged.
+  - Saving or deleting a CMS page, and changing the return policy settings, queue an llms rebuild.
+  - New `Model\LlmsTxt\PolicyPages`; `LlmsTxtBuilder`'s constructor takes it after
+    `CategoryProductCount`. Requires `magento/module-cms`, and MageOS_Seo's new
+    `Config::getReturnPolicyUrl()` (`^1.2.1`).
 - **A feed that could not be rebuilt, or was written incomplete, is shown in the admin** until a
   rebuild gets through: in the System Messages bar and once in the inbox, through MageOS_Seo's
   rebuild problems (its `docs/rebuild-problems.md`). **Requires mage-os/module-seo `^1.2.1`.**

@@ -64,10 +64,39 @@ Frequently asked questions:
 
 - [Home](https://example.com/): Store front page
 - [Sitemap](https://example.com/sitemap.xml): XML sitemap of indexable pages
+
+## Categories
+
+- [What's New](https://example.com/what-is-new.html)
+- [Women](https://example.com/women.html)
+- [Gear](https://example.com/gear.html): 34 products
+
+## Policies
+
+- [Returns policy](https://example.com/returns)
+- [Privacy and Cookie Policy](https://example.com/privacy-policy-cookie-restriction-mode): How we use your data
+- [About us](https://example.com/about-us)
 ```
 
 The Sitemap link points at the sitemap configured under Marketing → Site Map, and is left
 out when the store view has none.
+
+**Categories** are the storefront menu's top level, in the menu's order, with each one's product
+count. `/llms-full.txt` lists the whole tree instead; what is listed and counted is described
+[there](#content-of-llms-fulltxt).
+
+**Policies**, in both documents, lists:
+
+1. the **Returns Policy URL** (Stores → Configuration → MageOS SEO → SEO Merchant Policies → Return
+   Policy), while **Enable Return Policy Schema** is Yes;
+2. the CMS pages chosen under **Pages Listed in llms.txt** (Stores → Configuration → MageOS SEO →
+   AI Information & Crawlers → AI Discoverability), per store view and in that order. Each is listed
+   by its title, with its meta description as the note. A chosen page that is not active in the
+   store view is left out, with a warning in the log naming it; a page that is the returns policy
+   page is listed once.
+
+The section is left out when there is nothing to list. Saving or deleting any CMS page queues a
+rebuild, so a listed page's new title or description follows shortly.
 
 The locale line is left out when the store view has no locale configured, the FAQ list when the
 selected groups have no questions (the first 5 are shown), and the contact line when there is none
@@ -84,7 +113,7 @@ writing, so the language follows the store view, not the admin or CLI user. The 
 
 ## Content of /llms-full.txt
 
-Everything in `/llms.txt`, plus:
+Everything in `/llms.txt`, with the whole category tree in place of Categories, plus:
 
 - Social profile URLs (from Organisation → Social profiles), in the details list
 - Every FAQ of the selected groups, not just the first 5

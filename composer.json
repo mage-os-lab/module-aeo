@@ -11,6 +11,7 @@
         "magento/module-backend": "*",
         "magento/module-cache-invalidate": "*",
         "magento/module-catalog": "*",
+        "magento/module-cms": "*",
         "magento/module-config": "*",
         "magento/module-inventory-sales-api": "*",
         "magento/module-page-cache": "*",
