@@ -187,10 +187,12 @@ The values:
   (configurable, grouped, bundle) is priced 0, which Magento does when no option can price it, or
   when the lookup throws, which is logged with the SKU. MageOS_Seo's `Model\Product\FinalPrice`
   decides this here and in the product pages' structured data alike.
-- `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by MSI
-  salability on the website's stock, looked up for 1,000 products at a time. When that lookup
-  fails, the products it covered are written as OutOfStock and the failure is logged. Unlike the
-  JSON-LD on product pages, a line has no `BackOrder`.
+- `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by the
+  website's stock in MSI's stock index (`is_salable`, what the category listings filter on), read
+  for 1,000 products at a time. The index does not subtract reservations, orders placed but not yet
+  shipped: a product whose last units are all reserved stays InStock until shipping deducts them.
+  When the lookup fails, the products it covered are written as OutOfStock and the failure is
+  logged. Unlike the JSON-LD on product pages, a line has no `BackOrder`.
 
 A product gets a line when it is enabled, assigned to the store view's website, visible in
 *Catalog* or *Catalog, Search*, and in Magento's price index, which the feed reads its products

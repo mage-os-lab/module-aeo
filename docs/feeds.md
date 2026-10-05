@@ -156,6 +156,13 @@ The large feed is **streamed to its file** rather than assembled in memory: `/ll
 built one product per line from a paged collection. Peak memory is that of one page of
 products, not of the whole document — at 100k SKUs the document runs to tens of megabytes.
 
+Availability is read for a page of 1,000 products in one query from MSI's stock index. Each
+product's price is its own `PriceInfo`, the price a visitor is shown: its tier prices and catalog
+rules, and a configurable's children, are read per product. Measured on Luma's sample catalogue
+(180 lines, one store view): 816 queries and 1.7 seconds, where a per-product stock check made it
+2,960 queries and 7.0 seconds. The cost grows with the catalogue; it is paid in the queue consumer
+and the nightly cron, never in a web request.
+
 MageOS_Seo streams the XML sitemaps the same way, a page of the catalogue at a time; see its
 [sitemap.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/sitemap.md).
 

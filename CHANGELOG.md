@@ -115,7 +115,16 @@ before 2026-10-02. Its history up to then is kept in that repository.
     assignment change all three;
   - moving a category rebuilds `/llms.txt` and `/llms-full.txt`, which list the category tree.
 - `/llms.jsonl` is written one line at a time from a paged collection, so peak memory is one page of
-  products, and availability is read in batches through MSI's `AreProductsSalableInterface`.
+  products.
+- **`/llms.jsonl` reads availability from MSI's stock index in one query per 1,000 products.** MSI's
+  `AreProductsSalableInterface` takes a list but checks each SKU on its own, about six queries each.
+  On Luma's sample catalogue a rebuild went from 2,960 queries and 7.0 s to 816 and 1.7 s.
+  - The index (`is_salable`, what category listings filter on) does not subtract reservations: a
+    product whose last units are all reserved stays InStock until shipping deducts them. On the
+    sample catalogue, all 181 products read the same either way.
+  - New `Model\ResourceModel\StockIndexSalability`. `JsonlBuilder`'s constructor takes it in place of
+    `AreProductsSalableInterface`. Requires `magento/module-inventory-indexer` in place of
+    `magento/module-inventory-sales-api`.
 - All three documents are cacheable for 24 hours (`Cache-Control: public, max-age=86400,
   s-maxage=86400`); they sent `max-age=3600` before.
 

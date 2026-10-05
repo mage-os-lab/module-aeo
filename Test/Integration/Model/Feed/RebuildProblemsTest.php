@@ -7,7 +7,6 @@ namespace MageOS\Aeo\Test\Integration\Model\Feed;
 use Magento\Catalog\Test\Fixture\Product as ProductFixture;
 use Magento\Framework\FlagManager;
 use Magento\Framework\Stdlib\DateTime\TimezoneInterface;
-use Magento\InventorySalesApi\Api\AreProductsSalableInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\TestFramework\Fixture\Config;
@@ -16,6 +15,7 @@ use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
+use MageOS\Aeo\Model\ResourceModel\StockIndexSalability;
 use MageOS\Seo\Model\Rebuild\ProblemFormatter;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use MageOS\Seo\Model\Rebuild\RetrySchedule;
@@ -78,8 +78,8 @@ class RebuildProblemsTest extends TestCase
     #[DataFixture(ProductFixture::class, as: 'product')]
     public function testAFailedStockLookupShowsLlmsJsonlAsIncompleteUntilACleanRebuild(): void
     {
-        $failing = $this->createStub(AreProductsSalableInterface::class);
-        $failing->method('execute')->willThrowException(new \RuntimeException('Inventory is down'));
+        $failing = $this->createStub(StockIndexSalability::class);
+        $failing->method('salable')->willThrowException(new \RuntimeException('Inventory is down'));
 
         $this->regeneratorWith($failing)->regenerate(FeedRegenerator::GROUP_JSONL);
 
@@ -101,15 +101,15 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * A regenerator whose llms.jsonl builder asks the given salability service.
+     * A regenerator whose llms.jsonl builder reads salability from the given lookup.
      *
-     * @param AreProductsSalableInterface $areProductsSalable
+     * @param StockIndexSalability $salability
      * @return FeedRegenerator
      */
-    private function regeneratorWith(AreProductsSalableInterface $areProductsSalable): FeedRegenerator
+    private function regeneratorWith(StockIndexSalability $salability): FeedRegenerator
     {
         $objectManager = Bootstrap::getObjectManager();
-        $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, ['areProductsSalable' => $areProductsSalable]);
+        $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, ['stockIndexSalability' => $salability]);
 
         return $objectManager->create(FeedRegenerator::class, ['jsonlBuilder' => $jsonlBuilder]);
     }

@@ -8,10 +8,10 @@ use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
-use Magento\InventorySalesApi\Api\AreProductsSalableInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\JsonlLineProviderInterface;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
+use MageOS\Aeo\Model\ResourceModel\StockIndexSalability;
 use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
@@ -20,8 +20,10 @@ use Psr\Log\LoggerInterface;
  * Builds the /llms.jsonl document: one JSON-LD Product node per line for the store's catalog, plus
  * any lines contributed by bridge JsonlLineProviderInterface implementations.
  *
- * The catalog is processed in pages with URL rewrites and MSI salability resolved in one batch call
- * per page, so large catalogs neither exhaust memory nor trigger per-product lookup queries.
+ * The catalog is processed in pages, with URL rewrites loaded with the collection and salability read
+ * from the stock index in one query per page (StockIndexSalability), so large catalogs neither
+ * exhaust memory nor run a salability lookup per product. Each product's price is still its own
+ * PriceInfo, the price a visitor is shown.
  */
 class JsonlBuilder
 {
@@ -31,21 +33,21 @@ class JsonlBuilder
      * @param CollectionFactory $collectionFactory
      * @param ProductLineBuilder $productLineBuilder
      * @param StoreManagerInterface $storeManager
-     * @param AreProductsSalableInterface $areProductsSalable
+     * @param StockIndexSalability $stockIndexSalability
      * @param AvailabilityResolver $availabilityResolver
      * @param LoggerInterface $logger
      * @param ProblemLog $problemLog
      * @param array<mixed> $lineProviders
      */
     public function __construct(
-        private readonly CollectionFactory           $collectionFactory,
-        private readonly ProductLineBuilder          $productLineBuilder,
-        private readonly StoreManagerInterface       $storeManager,
-        private readonly AreProductsSalableInterface $areProductsSalable,
-        private readonly AvailabilityResolver        $availabilityResolver,
-        private readonly LoggerInterface             $logger,
-        private readonly ProblemLog                  $problemLog,
-        private readonly array                       $lineProviders = []
+        private readonly CollectionFactory     $collectionFactory,
+        private readonly ProductLineBuilder    $productLineBuilder,
+        private readonly StoreManagerInterface $storeManager,
+        private readonly StockIndexSalability  $stockIndexSalability,
+        private readonly AvailabilityResolver  $availabilityResolver,
+        private readonly LoggerInterface       $logger,
+        private readonly ProblemLog            $problemLog,
+        private readonly array                 $lineProviders = []
     ) {
     }
 
@@ -80,8 +82,7 @@ class JsonlBuilder
             $collection->setCurPage($page);
             $collection->clear();
 
-            // One MSI batch salability call per page instead of per-product
-            // resolution inside the line builder.
+            // One salability query per page instead of a lookup per product.
             $skus = [];
             foreach ($collection as $product) {
                 if ($product instanceof ProductInterface && (string) $product->getSku() !== '') {
@@ -118,12 +119,12 @@ class JsonlBuilder
     }
 
     /**
-     * Resolve salability for a page of SKUs in one MSI batch call.
+     * Resolve salability for a page of SKUs from the stock index, in one query.
      *
-     * On inventory API failure every product in the page is reported not
-     * salable (matching AvailabilityResolver's OutOfStock default) and the
-     * failure is logged rather than aborting the whole feed build. The admin is shown the
-     * store view's llms.jsonl as incomplete until a rebuild gets through.
+     * A SKU the stock index has no row for is not salable. When the lookup fails, every product
+     * in the page is reported not salable (matching AvailabilityResolver's OutOfStock default) and
+     * the failure is logged rather than aborting the whole feed build. The admin is shown the store
+     * view's llms.jsonl as incomplete until a rebuild gets through.
      *
      * @param string[] $skus
      * @param int $storeId
@@ -137,10 +138,10 @@ class JsonlBuilder
 
         $salability = [];
         try {
-            $stockId = $this->availabilityResolver->getCurrentStockId();
-            foreach ($this->areProductsSalable->execute($skus, $stockId) as $result) {
-                $salability[(string) $result->getSku()] = $result->isSalable();
-            }
+            $salability = $this->stockIndexSalability->salable(
+                $skus,
+                $this->availabilityResolver->getCurrentStockId()
+            );
         } catch (\Exception $e) {
             $this->logger->error(
                 'MageOS_Aeo: llms.jsonl salability batch failed: ' . $e->getMessage(),
