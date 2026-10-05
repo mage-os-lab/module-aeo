@@ -51,6 +51,19 @@ before 2026-10-02. Its history up to then is kept in that repository.
   own headings and labels are written in each store view's language.
 - **`@api` on every interface under `Api/`**, which marks the module's contract, and a unit test
   that fails if an interface there lacks it.
+- **A feed that could not be rebuilt, or was written incomplete, is shown in the admin** until a
+  rebuild gets through: in the System Messages bar and once in the inbox, through MageOS_Seo's
+  rebuild problems (its `docs/rebuild-problems.md`). **Requires mage-os/module-seo `^1.2.1`.**
+  - Each group's result is recorded by `FeedRegenerator::regenerate()`, so the nightly cron's
+    rebuild counts as well as the queue's and the command's. A group is built on its own for each
+    store view: `llms.txt` failing no longer stops `llms.jsonl` being written for that store view.
+    The result is still one error message per store view.
+  - Incomplete means a stock lookup failed while `/llms.jsonl` was built (that batch is listed as
+    out of stock), or the storage directory was refused and the feeds fell back to `var/mageos_aeo`.
+  - `LlmsRebuildHandler` labels the groups `llms.txt and llms-full.txt` and `llms.jsonl`, and names
+    the nightly job (`Cron\RegenerateFeeds::JOB`) as their retry.
+  - The constructors of `FeedRegenerator` (last), `FeedStorage` (last) and `JsonlBuilder` (before
+    `lineProviders`) take MageOS_Seo's `Model\Rebuild\ProblemLog`.
 
 ### Changed
 

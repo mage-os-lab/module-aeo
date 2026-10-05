@@ -18,6 +18,11 @@ use Psr\Log\LoggerInterface;
 class RegenerateFeeds
 {
     /**
+     * The job's name in etc/crontab.xml: the admin is told its next run as when a failed feed is retried.
+     */
+    public const JOB = 'mageos_aeo_regenerate_feeds';
+
+    /**
      * @param FeedRegenerator $feedRegenerator
      * @param LoggerInterface $logger
      */

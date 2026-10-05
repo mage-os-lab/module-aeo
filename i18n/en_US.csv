@@ -59,3 +59,8 @@ Crawlers not selected keep following your standard ""User-agent: *"" rules.","Ad
 Crawlers not selected keep following your standard ""User-agent: *"" rules."
 "Disallow These AI Crawlers","Disallow These AI Crawlers"
 "Selected crawlers get ""Disallow: /"". Crawlers not selected get no group of their own and follow your ""User-agent: *"" rules.","Selected crawlers get ""Disallow: /"". Crawlers not selected get no group of their own and follow your ""User-agent: *"" rules."
+"llms.txt and llms-full.txt","llms.txt and llms-full.txt"
+"llms.jsonl","llms.jsonl"
+"Feed %1","Feed %1"
+"The stock lookup failed, so some products are listed as out of stock.","The stock lookup failed, so some products are listed as out of stock."
+"The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead."

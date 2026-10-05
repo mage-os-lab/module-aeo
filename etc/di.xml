@@ -83,5 +83,11 @@
             <argument name="feedRegenerator" xsi:type="object">MageOS\Aeo\Model\Feed\FeedRegenerator\Proxy</argument>
         </arguments>
     </type>
+    <!-- Every storefront request for a feed reads storage; only a rebuild reports to the problem log. -->
+    <type name="MageOS\Aeo\Model\Feed\FeedStorage">
+        <arguments>
+            <argument name="problemLog" xsi:type="object">MageOS\Seo\Model\Rebuild\ProblemLog\Proxy</argument>
+        </arguments>
+    </type>
 
 </config>

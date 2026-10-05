@@ -11,6 +11,7 @@ use MageOS\Aeo\Exception\FeedRebuildInProgressException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
+use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -46,6 +47,7 @@ class FeedRegenerator
      * @param FeedCache $feedCache
      * @param LoggerInterface $logger
      * @param RebuildLock $rebuildLock
+     * @param ProblemLog $problemLog
      */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
@@ -56,7 +58,8 @@ class FeedRegenerator
         private readonly FeedStorage           $feedStorage,
         private readonly FeedCache             $feedCache,
         private readonly LoggerInterface       $logger,
-        private readonly RebuildLock           $rebuildLock
+        private readonly RebuildLock           $rebuildLock,
+        private readonly ProblemLog            $problemLog
     ) {
     }
 
@@ -64,7 +67,9 @@ class FeedRegenerator
      * Regenerate one feed group (or all, when null) for every active store view.
      *
      * A failing store view is logged and skipped so the others are still built; the
-     * failures are returned for callers that report them (the CLI command).
+     * failures are returned for callers that report them (the CLI command). Each group's result
+     * is also recorded for the admin (MageOS_Seo's ProblemLog), whichever process ran it: the
+     * cron, the queue consumer or the command.
      *
      * @param string|null $group One of self::GROUPS, or null for all
      * @throws FeedRebuildInProgressException When another process is already building
@@ -78,20 +83,44 @@ class FeedRegenerator
             );
         }
 
+        $groups = $group === null ? self::GROUPS : [$group];
+        foreach ($groups as $each) {
+            $this->problemLog->rebuilding($each);
+        }
+
         try {
-            return $this->build($group);
+            $failures = $this->build($groups, $group === null);
+        } catch (\Throwable $e) {
+            foreach ($groups as $each) {
+                $this->problemLog->rebuilt($each, [ProblemLog::ALL => $e->getMessage()]);
+            }
+            throw $e;
         } finally {
             $this->rebuildLock->release();
         }
+
+        $byStore = [];
+        foreach ($groups as $each) {
+            $this->problemLog->rebuilt($each, $failures[$each] ?? []);
+            foreach ($failures[$each] ?? [] as $storeId => $message) {
+                $byStore[$storeId] = isset($byStore[$storeId]) ? $byStore[$storeId] . '; ' . $message : $message;
+            }
+        }
+
+        return $byStore;
     }
 
     /**
      * Build the feeds, with the rebuild lock already held.
      *
-     * @param string|null $group
-     * @return array<int, string> Error message per failed store view ID
+     * Each group of each store view is built on its own, so one group failing neither stops the
+     * other nor is blamed on it.
+     *
+     * @param string[] $groups
+     * @param bool $everything Whether this is the full rebuild, which also sweeps orphaned directories
+     * @return array<string, array<int, string>> Error message per group and failed store view ID
      */
-    private function build(?string $group): array
+    private function build(array $groups, bool $everything): array
     {
         $failures = [];
         foreach ($this->storeManager->getStores() as $store) {
@@ -102,23 +131,31 @@ class FeedRegenerator
 
             $this->emulation->startEnvironmentEmulation($storeId, Area::AREA_FRONTEND, true);
             try {
-                $this->generateForStore($storeId, $group);
-            } catch (\Throwable $e) {
-                $failures[$storeId] = $e->getMessage();
-                $this->logger->error(
-                    \sprintf('MageOS_Aeo: feed regeneration failed for store %d: %s', $storeId, $e->getMessage()),
-                    ['exception' => $e, 'group' => $group]
-                );
+                foreach ($groups as $group) {
+                    try {
+                        $this->generateForStore($storeId, $group);
+                    } catch (\Throwable $e) {
+                        $failures[$group][$storeId] = $e->getMessage();
+                        $this->logger->error(
+                            \sprintf(
+                                'MageOS_Aeo: feed regeneration failed for store %d: %s',
+                                $storeId,
+                                $e->getMessage()
+                            ),
+                            ['exception' => $e, 'group' => $group]
+                        );
+                    }
+                }
             } finally {
                 $this->emulation->stopEnvironmentEmulation();
             }
         }
 
-        if ($group === null) {
+        if ($everything) {
             $this->removeOrphanedStoreDirectories();
         }
 
-        $this->purgeCachedResponses($group === null ? self::GROUPS : [$group]);
+        $this->purgeCachedResponses($groups);
 
         return $failures;
     }
@@ -154,16 +191,16 @@ class FeedRegenerator
     }
 
     /**
-     * Generate the requested feeds for the currently emulated store.
+     * Generate one group's feeds for the currently emulated store.
      *
      * @param int $storeId
-     * @param string|null $group
+     * @param string $group
      * @throws \Magento\Framework\Exception\FileSystemException
      * @return void
      */
-    private function generateForStore(int $storeId, ?string $group): void
+    private function generateForStore(int $storeId, string $group): void
     {
-        if ($group === null || $group === self::GROUP_LLMS) {
+        if ($group === self::GROUP_LLMS) {
             $this->writeOrRemove(
                 self::FILE_LLMS,
                 $storeId,
@@ -178,7 +215,7 @@ class FeedRegenerator
             );
         }
 
-        if ($group === null || $group === self::GROUP_JSONL) {
+        if ($group === self::GROUP_JSONL) {
             if ($this->aeoConfig->isLlmsJsonlEnabled($storeId)) {
                 $this->writeStream(self::FILE_JSONL, $storeId, $this->jsonlBuilder->stream());
             } else {

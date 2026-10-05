@@ -47,6 +47,14 @@ A queued rebuild that the consumer has not picked up within one hour is queued a
 and a warning is logged (`the "<group>" feed rebuild … was never picked up`). If you
 see that warning, the consumer is not running: check your cron or process manager.
 
+Every rebuild's result is also shown in the admin, whichever process ran it: a store view's
+feed that could not be rebuilt, or was written incomplete, is listed in the System Messages
+bar and once in the inbox, with the time the nightly cron retries it, until a rebuild gets
+through. Two things make a feed incomplete rather than failed: a stock lookup that fails while
+`llms.jsonl` is built (that batch is listed as out of stock), and a storage directory that is
+refused (see [below](#where-the-files-are-stored)). See MageOS_Seo's
+[rebuild-problems.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/rebuild-problems.md).
+
 ### Only one rebuild runs at a time
 
 Three things write the same files — the consumer, the nightly cron and
@@ -171,7 +179,8 @@ The rules are applied twice: when the value is saved, with the reason shown in t
 again when it is read — a row can reach `core_config_data` from a data patch, a deployment tool
 or straight from the database, and a directory these rules refuse is never written to however it
 arrived. A refused value is logged and the feeds fall back to `var/mageos_aeo` rather than
-failing.
+failing. Each rebuild that falls back is shown in the admin as incomplete until the setting is
+fixed: on a multi-server install, the web servers may not see this host's `var/`.
 
 ### Permissions
 

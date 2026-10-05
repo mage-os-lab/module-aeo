@@ -12,9 +12,11 @@ use Magento\Framework\Filesystem\Directory\WriteFactory;
 use Magento\Framework\Filesystem\Directory\WriteInterface;
 use Magento\Framework\Filesystem\DriverPool;
 use Magento\Framework\Filesystem\File\WriteInterface as FileWriteInterface;
+use Magento\Framework\Phrase;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
+use MageOS\Seo\Model\Rebuild\ProblemLog;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -150,6 +152,44 @@ class FeedStorageTest extends TestCase
         $writeDir->expects($this->once())->method('delete')->with('mageos_aeo/store_1/llms.txt');
 
         $this->storage(false)->deleteForStore('llms.txt', 1);
+    }
+
+    public function testFallingBackFromARefusedDirectoryIsReportedToTheRebuildsUnderWay(): void
+    {
+        // On a multi-server install the web servers may not see this host's var/, so the admin
+        // is told rather than only the log.
+        $this->config->method('getFeedStorageDir')->willReturn('/etc');
+        $this->filesystem->method('getDirectoryWrite')->willReturn($this->emptyDirectory());
+        $problemLog = $this->createMock(ProblemLog::class);
+        $problemLog->expects($this->atLeastOnce())->method('degradedWhileRebuilding')
+            ->with($this->callback(
+                static fn (Phrase $reason): bool => str_contains($reason->getText(), 'var/mageos_aeo')
+            ));
+
+        $this->storage(false, $problemLog)->deleteForStore('llms.txt', 1);
+    }
+
+    public function testAPermittedDirectoryReportsNothing(): void
+    {
+        $this->config->method('getFeedStorageDir')->willReturn('/srv/feeds');
+        $this->writeFactory->method('create')->willReturn($this->emptyDirectory());
+        $problemLog = $this->createMock(ProblemLog::class);
+        $problemLog->expects($this->never())->method('degradedWhileRebuilding');
+
+        $this->storage(true, $problemLog)->deleteForStore('llms.txt', 1);
+    }
+
+    /**
+     * A storage directory with nothing in it.
+     *
+     * @return WriteInterface
+     */
+    private function emptyDirectory(): WriteInterface
+    {
+        $directory = $this->createStub(WriteInterface::class);
+        $directory->method('read')->willReturn([]);
+
+        return $directory;
     }
 
     public function testWriteUsesCustomDirectoryWithoutThePrefix(): void
@@ -342,9 +382,10 @@ class FeedStorageTest extends TestCase
      * permitted at all is StorageDirectoryTest's subject, not this one's.
      *
      * @param bool $directoryAllowed
+     * @param ProblemLog|null $problemLog
      * @return FeedStorage
      */
-    private function storage(bool $directoryAllowed = true): FeedStorage
+    private function storage(bool $directoryAllowed = true, ?ProblemLog $problemLog = null): FeedStorage
     {
         $storageDirectory = $this->createStub(StorageDirectory::class);
         $storageDirectory->method('isAllowed')->willReturn($directoryAllowed);
@@ -355,7 +396,8 @@ class FeedStorageTest extends TestCase
             $this->readFactory,
             $this->config,
             $storageDirectory,
-            $this->createStub(LoggerInterface::class)
+            $this->createStub(LoggerInterface::class),
+            $problemLog ?? $this->createStub(ProblemLog::class)
         );
     }
 }

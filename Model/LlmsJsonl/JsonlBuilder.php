@@ -11,7 +11,9 @@ use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\InventorySalesApi\Api\AreProductsSalableInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\JsonlLineProviderInterface;
+use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Seo\Model\Product\AvailabilityResolver;
+use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -32,6 +34,7 @@ class JsonlBuilder
      * @param AreProductsSalableInterface $areProductsSalable
      * @param AvailabilityResolver $availabilityResolver
      * @param LoggerInterface $logger
+     * @param ProblemLog $problemLog
      * @param array<mixed> $lineProviders
      */
     public function __construct(
@@ -41,6 +44,7 @@ class JsonlBuilder
         private readonly AreProductsSalableInterface $areProductsSalable,
         private readonly AvailabilityResolver        $availabilityResolver,
         private readonly LoggerInterface             $logger,
+        private readonly ProblemLog                  $problemLog,
         private readonly array                       $lineProviders = []
     ) {
     }
@@ -84,7 +88,7 @@ class JsonlBuilder
                     $skus[] = (string) $product->getSku();
                 }
             }
-            $salability = $this->resolveSalability($skus);
+            $salability = $this->resolveSalability($skus, $storeId);
 
             foreach ($collection as $product) {
                 if (!$product instanceof ProductInterface) {
@@ -118,12 +122,14 @@ class JsonlBuilder
      *
      * On inventory API failure every product in the page is reported not
      * salable (matching AvailabilityResolver's OutOfStock default) and the
-     * failure is logged rather than aborting the whole feed build.
+     * failure is logged rather than aborting the whole feed build. The admin is shown the
+     * store view's llms.jsonl as incomplete until a rebuild gets through.
      *
      * @param string[] $skus
+     * @param int $storeId
      * @return array<string, bool> sku => salable
      */
-    private function resolveSalability(array $skus): array
+    private function resolveSalability(array $skus, int $storeId): array
     {
         if (empty($skus)) {
             return [];
@@ -139,6 +145,11 @@ class JsonlBuilder
             $this->logger->error(
                 'MageOS_Aeo: llms.jsonl salability batch failed: ' . $e->getMessage(),
                 ['exception' => $e]
+            );
+            $this->problemLog->degraded(
+                FeedRegenerator::GROUP_JSONL,
+                $storeId,
+                __('The stock lookup failed, so some products are listed as out of stock.')
             );
         }
 
