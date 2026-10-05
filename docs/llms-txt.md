@@ -101,6 +101,17 @@ Everything in `/llms.txt`, plus:
   - [Men's](https://example.com/clothing/mens.html): 97 products
 ```
 
+A count is the number of products the category's page lists: enabled, in the store view's website
+and visible in *Catalog* or *Catalog, Search*. An anchor category's count includes its
+subcategories' products, as its page does. A category that lists nothing has no count. The counts
+come from Magento's category product index, so:
+
+- **stock is not taken into account.** With **Display Out of Stock Products** at No, the page can
+  list fewer;
+- **they are as current as the index.** With the indexers on Update by Schedule, they follow once
+  the indexer has run. Enabling or disabling a product, or changing its visibility, does not queue
+  a rebuild of its own: the nightly rebuild brings the counts up to date.
+
 The section is left out when the store has no visible categories. If they cannot be read, the
 store's build fails: FeedRegenerator logs it and keeps serving the previous file.
 

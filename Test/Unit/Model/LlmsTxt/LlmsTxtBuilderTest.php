@@ -14,6 +14,7 @@ use Magento\Store\Model\Website;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
 use MageOS\Aeo\Model\LlmsTxt\SitemapUrlResolver;
+use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
 use MageOS\Seo\Api\Data\OrganizationInterface;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\Config;
@@ -74,6 +75,13 @@ class LlmsTxtBuilderTest extends TestCase
 
     private ?string $sitemapUrl = 'https://shop.test/media/sitemap.xml';
 
+    /**
+     * Products listed per category ID, as the count resource model returns them.
+     *
+     * @var array<int, int>
+     */
+    private array $listed = [];
+
     protected function setUp(): void
     {
         $store = $this->createStub(Store::class);
@@ -105,16 +113,25 @@ class LlmsTxtBuilderTest extends TestCase
 
         $this->categoryCollectionFactory = $this->createStub(CategoryCollectionFactory::class);
         $this->categoryCollectionFactory->method('create')->willReturn($this->categoryCollection([
-            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing',
-                'url_path' => 'clothing', 'product_count' => 245],
-            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => "Men's [Sale]",
-                'url_path' => 'clothing/mens-sale', 'product_count' => 0],
-            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids',
-                'url_path' => 'kids (new)', 'product_count' => 3],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
+            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => "Men's [Sale]", 'url_path' => 'clothing/mens-sale'],
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids (new)'],
             // Child of an inactive parent (5 is not in the collection): must be skipped.
-            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden',
-                'url_path' => 'hidden/child', 'product_count' => 9],
+            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden', 'url_path' => 'hidden/child'],
         ]));
+        // Category 4 lists nothing, so the count has no entry for it.
+        $this->listed = [3 => 245, 7 => 3, 6 => 9];
+    }
+
+    public function testEachCategoryShowsHowManyProductsItsPageListsInThisStoreView(): void
+    {
+        $counts = $this->createMock(CategoryProductCount::class);
+        $counts->expects($this->once())->method('countListed')->with(1, [3, 4, 7, 6])->willReturn([3 => 245]);
+
+        $document = $this->builder(categoryProductCount: $counts)->buildFull();
+
+        $this->assertStringContainsString('- [Clothing](https://shop.test/clothing.html): 245 products', $document);
+        $this->assertStringContainsString('- [Kids](https://shop.test/kids%20%28new%29.html)' . "\n", $document);
     }
 
     public function testConciseDocumentPassesLighthouseChecks(): void
@@ -258,10 +275,15 @@ class LlmsTxtBuilderTest extends TestCase
 
     /**
      * @param LlmsTxtSectionProviderInterface[] $providers
+     * @param CategoryProductCount|null $categoryProductCount
      * @return LlmsTxtBuilder
      */
-    private function builder(array $providers = []): LlmsTxtBuilder
+    private function builder(array $providers = [], ?CategoryProductCount $categoryProductCount = null): LlmsTxtBuilder
     {
+        if ($categoryProductCount === null) {
+            $categoryProductCount = $this->createStub(CategoryProductCount::class);
+            $categoryProductCount->method('countListed')->willReturn($this->listed);
+        }
         $repository = $this->createStub(OrganizationRepositoryInterface::class);
         $repository->method('getForScope')->willReturn($this->organization);
         $seoConfig = $this->createStub(Config::class);
@@ -280,6 +302,7 @@ class LlmsTxtBuilderTest extends TestCase
             $seoConfig,
             $contactEmail,
             $sitemapResolver,
+            $categoryProductCount,
             $providers
         );
     }
@@ -303,7 +326,11 @@ class LlmsTxtBuilderTest extends TestCase
      */
     private function categoryCollection(array $rows): CategoryCollection&Stub
     {
-        $items = array_map(static fn (array $row): DataObject => new DataObject($row), $rows);
+        // Keyed by ID, as a loaded collection's items are.
+        $items = [];
+        foreach ($rows as $row) {
+            $items[$row['id']] = new DataObject($row);
+        }
 
         $collection = $this->createStub(CategoryCollection::class);
         $fluent = ['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addAttributeToFilter', 'setOrder'];

@@ -9,6 +9,7 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
+use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\Config;
 use MageOS\Seo\Model\Organization\ContactEmail;
@@ -82,6 +83,7 @@ class LlmsTxtBuilder
      * @param Config $seoConfig
      * @param ContactEmail $contactEmail
      * @param SitemapUrlResolver $sitemapUrlResolver
+     * @param CategoryProductCount $categoryProductCount
      * @param \MageOS\Aeo\Api\LlmsTxtSectionProviderInterface[] $sectionProviders
      */
     public function __construct(
@@ -93,6 +95,7 @@ class LlmsTxtBuilder
         private readonly Config                          $seoConfig,
         private readonly ContactEmail                    $contactEmail,
         private readonly SitemapUrlResolver              $sitemapUrlResolver,
+        private readonly CategoryProductCount            $categoryProductCount,
         private readonly array                           $sectionProviders = []
     ) {
     }
@@ -298,9 +301,8 @@ class LlmsTxtBuilder
             ->addAttributeToFilter('level', ['gt' => 1])
             ->setOrder('path', 'ASC');
 
-        // One grouped query for all product counts. Direct assignment counts only:
-        // anchor roll-up counts cost one query per category.
-        $collection->loadProductCount($collection->getItems(), true, false);
+        // What each category page lists, an anchor's subcategories included: one query.
+        $counts = $this->categoryProductCount->countListed($storeId, array_keys($collection->getItems()));
 
         $urlSuffix = (string) $this->scopeConfig->getValue(
             'catalog/seo/category_url_suffix',
@@ -325,7 +327,7 @@ class LlmsTxtBuilder
                 self::URL_REPLACEMENTS
             );
             $label  = $this->linkLabel((string) $category->getName());
-            $count  = (int) $category->getProductCount();
+            $count  = $counts[(int) $category->getId()] ?? 0;
             $note   = $count > 0 ? ': ' . __('%1 products', $count) : '';
             $items[] = "{$indent}- [{$label}]({$url}){$note}";
         }

@@ -109,6 +109,16 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ### Fixed
 
+- **The category tree in `/llms-full.txt` counts what each category page lists.** An anchor category,
+  Magento's default, had no count at all, and every other category counted its raw assignments:
+  disabled products and a configurable's children included (Luma's Men → Jackets: 176, where its
+  page lists 11).
+  - A count is now the products the page lists: enabled, in the website, visible in the catalogue,
+    and for an anchor, its subcategories' too. They are read from the store view's category product
+    index in one query, by the new `Model\ResourceModel\CategoryProductCount`.
+  - Stock is not taken into account (the index has none), and the counts are as current as the
+    index. See `docs/llms-txt.md`.
+  - `LlmsTxtBuilder`'s constructor takes `CategoryProductCount` before `sectionProviders`.
 - **A `/llms.jsonl` line whose price is not known leaves the price out, instead of `0.00`,** which
   reads as free.
   - The offer keeps its availability and URL, without `price` and `priceCurrency`.
