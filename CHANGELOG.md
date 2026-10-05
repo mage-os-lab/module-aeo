@@ -12,6 +12,8 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-10-05
+
 ### Added
 
 - **Split from mage-os/module-seo.** `/llms.txt`, `/llms-full.txt` and `/llms.jsonl`, their feed
