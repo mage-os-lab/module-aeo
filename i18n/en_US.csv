@@ -7,7 +7,10 @@
 "The feed storage directory must not contain "".."".","The feed storage directory must not contain ""..""."
 "The feed storage directory must not contain hidden directories.","The feed storage directory must not contain hidden directories."
 "The feed storage directory does not exist: %1","The feed storage directory does not exist: %1"
-"The feed storage directory is not a writable directory: %1","The feed storage directory is not a writable directory: %1"
+"The feed storage directory is not a directory: %1","The feed storage directory is not a directory: %1"
+"The feed storage directory cannot be written to from here: %1","The feed storage directory cannot be written to from here: %1"
+"The feed storage directory cannot be read from here: %1","The feed storage directory cannot be read from here: %1"
+"var/ itself cannot be the feed storage directory, as it holds other files too. Use a directory inside it, such as var/mageos_aeo, or leave the setting empty.","var/ itself cannot be the feed storage directory, as it holds other files too. Use a directory inside it, such as var/mageos_aeo, or leave the setting empty."
 "Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php.","Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php."
 "The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php.","The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php."
 "Frequently asked questions:","Frequently asked questions:"
@@ -46,12 +49,12 @@ line) at /llms.jsonl. Off by default."
 "Feed Storage","Feed Storage"
 "Storage Directory","Storage Directory"
 "Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php."
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php."
 "AI Crawler robots.txt Directives","AI Crawler robots.txt Directives"
 "Append AI Crawler Directives","Append AI Crawler Directives"
 "Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
@@ -83,6 +86,5 @@ its meta description. A page not available in this store view is left out."
 "A feed file could not be written.","A feed file could not be written."
 "The file ""%1"" could not be put in place.","The file ""%1"" could not be put in place."
 "The file ""%1"" could not be deleted.","The file ""%1"" could not be deleted."
-"The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place.","The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place."
 "The directory ""%1"" could not be deleted.","The directory ""%1"" could not be deleted."
 "The var/ directory could not be resolved.","The var/ directory could not be resolved."

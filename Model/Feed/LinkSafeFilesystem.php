@@ -303,44 +303,65 @@ class LinkSafeFilesystem
     }
 
     /**
-     * Remove a store directory: a link is removed itself, a real directory with the files and links in it.
+     * Remove what feed storage put in a store directory, and the directory once nothing else is in it.
      *
-     * Feed storage only ever puts files in a store directory, so one holding a directory was made
-     * by something else and is refused, with nothing removed.
+     * Only entries matching the patterns — the file names feed storage writes — are removed, as
+     * files or links, never followed. Anything else was put there by something else and stays, and
+     * so does the directory (issue #6). A link in place of the directory is removed itself.
      *
      * @param string $path
+     * @param string[] $patterns Glob patterns of the names feed storage writes
      * @throws FileSystemException
-     * @return void
+     * @return bool Whether nothing is left at the path
      */
-    public function removeDirectory(string $path): void
+    public function removeOwned(string $path, array $patterns): bool
     {
         $type = $this->type($path);
         if ($type === self::MISSING) {
-            return;
+            return true;
         }
         if ($type !== self::DIRECTORY) {
             if (!@unlink($path)) {
                 throw new FileSystemException(new Phrase('The file "%1" could not be deleted.', [$path]));
             }
-            return;
+            return true;
         }
 
-        $names = $this->names($path);
-        foreach ($names as $name) {
-            if ($this->type($path . '/' . $name) === self::DIRECTORY) {
-                throw new FileSystemException(new Phrase(
-                    'The feed directory "%1" holds a directory, which feed storage never creates, so it was'
-                    . ' left in place.',
-                    [$path]
-                ));
+        $left = false;
+        foreach ($this->names($path) as $name) {
+            if ($this->matchesAny($name, $patterns)) {
+                $this->removeFrom($path, $name);
+                $left = $left || $this->type($path . '/' . $name) !== self::MISSING;
+            } else {
+                $left = true;
             }
         }
-        foreach ($names as $name) {
-            $this->removeFrom($path, $name);
+        if ($left) {
+            return false;
         }
         if (!@rmdir($path)) {
             throw new FileSystemException(new Phrase('The directory "%1" could not be deleted.', [$path]));
         }
+
+        return true;
+    }
+
+    /**
+     * Whether a name matches one of the glob patterns.
+     *
+     * @param string $name
+     * @param string[] $patterns
+     * @return bool
+     */
+    private function matchesAny(string $name, array $patterns): bool
+    {
+        foreach ($patterns as $pattern) {
+            if (fnmatch($pattern, $name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

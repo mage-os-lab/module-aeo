@@ -7,7 +7,10 @@
 "The feed storage directory must not contain "".."".","De opslagmap voor feeds mag geen "".."" bevatten."
 "The feed storage directory must not contain hidden directories.","De opslagmap voor feeds mag geen verborgen mappen bevatten."
 "The feed storage directory does not exist: %1","De opslagmap voor feeds bestaat niet: %1"
-"The feed storage directory is not a writable directory: %1","De opslagmap voor feeds is geen beschrijfbare map: %1"
+"The feed storage directory is not a directory: %1","De opslagmap voor feeds is geen map: %1"
+"The feed storage directory cannot be written to from here: %1","Vanaf hier kan niet in de opslagmap voor feeds worden geschreven: %1"
+"The feed storage directory cannot be read from here: %1","De opslagmap voor feeds kan vanaf hier niet worden gelezen: %1"
+"var/ itself cannot be the feed storage directory, as it holds other files too. Use a directory inside it, such as var/mageos_aeo, or leave the setting empty.","var/ zelf kan niet de opslagmap voor feeds zijn, want er staan ook andere bestanden in. Gebruik een map daarbinnen, zoals var/mageos_aeo, of laat de instelling leeg."
 "Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php.","Binnen de installatie mag alleen var/ worden gebruikt. Wil je feeds ergens anders opslaan, voeg de map dan toe aan ""%1"" in app/etc/env.php."
 "The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php.","De opslagmap voor feeds moet in var/ liggen, of een map zijn die onder ""%1"" in app/etc/env.php staat."
 "Frequently asked questions:","Veelgestelde vragen:"
@@ -43,9 +46,9 @@ line) at /llms.jsonl. Off by default.","Bied op /llms.jsonl een machineleesbare 
 "Feed Storage",Feedopslag
 "Storage Directory",Opslagmap
 "Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl). Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan."
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl), voor niets anders gebruikt. Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen een map binnen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan."
 "AI Crawler robots.txt Directives","robots.txt-instructies voor AI-crawlers"
 "Append AI Crawler Directives","AI-crawlerinstructies toevoegen"
 "Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
@@ -74,6 +77,5 @@ its meta description. A page not available in this store view is left out.","CMS
 "A feed file could not be written.","Een feedbestand kon niet worden geschreven."
 "The file ""%1"" could not be put in place.","Het bestand ""%1"" kon niet op zijn plaats worden gezet."
 "The file ""%1"" could not be deleted.","Het bestand ""%1"" kon niet worden verwijderd."
-"The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place.","De feedmap ""%1"" bevat een map, die de feedopslag nooit aanmaakt, en is daarom blijven staan."
 "The directory ""%1"" could not be deleted.","De map ""%1"" kon niet worden verwijderd."
 "The var/ directory could not be resolved.","De map var/ kon niet worden herleid."

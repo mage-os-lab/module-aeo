@@ -59,9 +59,9 @@ its meta description. A page not available in this store view is left out.</comm
                     <label>Storage Directory</label>
                     <backend_model>MageOS\Aeo\Model\Config\Backend\FeedStorageDir</backend_model>
                     <comment><![CDATA[Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.]]></comment>
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.]]></comment>
                 </field>
             </group>
 

@@ -6,9 +6,11 @@ namespace MageOS\Aeo\Test\Unit\Model\Feed;
 
 // phpcs:disable Magento2.Functions.DiscouragedFunction -- the test checks the disk directly
 
+use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Phrase;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\Feed\LinkSafeFilesystem;
@@ -230,16 +232,53 @@ class FeedStorageTest extends TestCase
         unlink($this->var . '/mageos_aeo');
     }
 
-    public function testAFailedDeletionIsLoggedNotThrown(): void
+    public function testADirectoryHoldingWhatFeedStorageDidNotWriteIsKeptWithANotice(): void
     {
-        // The store view is already deleted when this runs; a failure must not surface there.
-        mkdir($this->var . '/mageos_aeo/store_3/unexpected', 0o750, true);
+        // Issue #6: the feed files go, everything else stays, and so does the directory.
+        $storage = $this->storage();
+        $storage->write('llms.txt', 3, 'feed');
+        mkdir($this->var . '/mageos_aeo/store_3/unexpected');
         $logger = $this->createMock(LoggerInterface::class);
-        $logger->expects($this->once())->method('warning')->with($this->stringContains('holds a directory'));
+        $logger->expects($this->once())->method('notice')->with($this->stringContains('was kept'));
 
         $this->storage('', true, null, $logger)->deleteStoreDirectory(3);
 
+        $this->assertFileDoesNotExist($this->var . '/mageos_aeo/store_3/llms.txt');
         $this->assertDirectoryExists($this->var . '/mageos_aeo/store_3/unexpected');
+    }
+
+    public function testUnusableStorageIsReportedAndLoggedOncePerInterval(): void
+    {
+        // Issue #7: a mount missing on this host is not "no file yet", and every request meets it.
+        // A cache that keeps what it is given, for the two requests.
+        $memory = new class {
+            /**
+             * @var array<string, string>
+             */
+            public array $entries = [];
+        };
+        $cache = $this->createStub(CacheInterface::class);
+        $cache->method('load')->willReturnCallback(
+            static fn (string $key): string|false => $memory->entries[$key] ?? false
+        );
+        $cache->method('save')->willReturnCallback(
+            static function (string $data, string $key) use ($memory): bool {
+                $memory->entries[$key] = $data;
+                return true;
+            }
+        );
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('error')->with($this->stringContains('cannot be used'));
+        $storage = $this->storage($this->custom, true, null, $logger, $cache, true);
+
+        foreach ([1, 2] as $request) {
+            try {
+                $storage->open('llms.txt', 1);
+                $this->fail("Request {$request} did not report the storage.");
+            } catch (FeedStorageUnavailableException) {
+                // Reported.
+            }
+        }
     }
 
     /**
@@ -249,20 +288,30 @@ class FeedStorageTest extends TestCase
      * @param bool $permitted Whether the installation permits the configured directory
      * @param ProblemLog|null $problemLog
      * @param LoggerInterface|null $logger
+     * @param CacheInterface|null $cache
+     * @param bool $unavailable Whether this host cannot use the configured directory
      * @return FeedStorage
      */
     private function storage(
         string $configured = '',
         bool $permitted = true,
         ?ProblemLog $problemLog = null,
-        ?LoggerInterface $logger = null
+        ?LoggerInterface $logger = null,
+        ?CacheInterface $cache = null,
+        bool $unavailable = false
     ): FeedStorage {
         $directoryList = $this->createStub(DirectoryList::class);
         $directoryList->method('getPath')->willReturnMap([[DirectoryList::VAR_DIR, $this->var]]);
         $config = $this->createStub(Config::class);
         $config->method('getFeedStorageDir')->willReturn($configured);
         $storageDirectory = $this->createStub(StorageDirectory::class);
-        $storageDirectory->method('permittedPath')->willReturn($permitted ? $configured : null);
+        if ($unavailable) {
+            $storageDirectory->method('locate')->willThrowException(
+                new FeedStorageUnavailableException(__('The feed storage directory does not exist: %1', [$configured]))
+            );
+        } else {
+            $storageDirectory->method('locate')->willReturn($permitted && $configured !== '' ? $configured : null);
+        }
 
         return new FeedStorage(
             $directoryList,
@@ -271,7 +320,8 @@ class FeedStorageTest extends TestCase
             $config,
             $storageDirectory,
             $logger ?? $this->createStub(LoggerInterface::class),
-            $problemLog ?? $this->createStub(ProblemLog::class)
+            $problemLog ?? $this->createStub(ProblemLog::class),
+            $cache ?? $this->createStub(CacheInterface::class)
         );
     }
 }

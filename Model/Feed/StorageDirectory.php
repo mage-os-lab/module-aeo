@@ -9,9 +9,10 @@ use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Phrase;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 
 /**
- * Decides whether a configured feed storage directory may be written to.
+ * Decides whether a configured feed storage directory may be used, and for what.
  *
  * The setting exists for multi-server deployments, where web servers and the cron host need a
  * shared mount, so it has to accept an absolute path outside the installation. Left unguarded,
@@ -28,8 +29,16 @@ use Magento\Framework\Phrase;
  * Paths are resolved before they are judged, so a symlink inside var/ cannot stand for a target
  * outside it, and a link with a visible name cannot stand for a hidden directory (issue #2): the
  * hidden-directory rule applies to the path as typed and as resolved. A directory every user can
- * write to is refused too, since anyone could then put a link in it. FeedStorage works on the
- * resolved path (permittedPath()), so a link swapped after the check does not move it.
+ * write to is refused too, since anyone could then put a link in it. var/ itself is refused
+ * (issue #6): it holds everything else's files, and feed storage keeps store directories in its
+ * root. FeedStorage works on the resolved path (locate()), so a link swapped after the check does
+ * not move it.
+ *
+ * A location the rules refuse is the setting's fault, and storage falls back to var/mageos_aeo. An
+ * allowed location this host cannot use for what is asked — missing, not a directory, not
+ * readable for a request, not writable for a rebuild — is the server's, and is reported instead
+ * (FeedStorageUnavailableException, issue #7): a web host may only read the directory the cron
+ * host writes, and a mount missing on one host must not send that host to its own var/.
  */
 class StorageDirectory
 {
@@ -37,6 +46,16 @@ class StorageDirectory
      * The deployment-config key holding the roots an installation permits.
      */
     public const DEPLOYMENT_CONFIG_PATH = 'mageos_aeo/feed_storage_roots';
+
+    /**
+     * Using the directory to serve feeds: it must be readable.
+     */
+    public const READ = 'read';
+
+    /**
+     * Using the directory to write feeds: it must be writable.
+     */
+    public const WRITE = 'write';
 
     /**
      * @param DirectoryList $directoryList
@@ -51,7 +70,7 @@ class StorageDirectory
     }
 
     /**
-     * Whether a configured value may be used.
+     * Whether a configured value may be used to serve feeds on this host.
      *
      * An empty value is the default: var/mageos_aeo, which needs no configuration at all.
      *
@@ -60,26 +79,39 @@ class StorageDirectory
      */
     public function isAllowed(string $path): bool
     {
-        return $this->judge(trim($path))[0] === null;
+        [$refused, $unavailable] = $this->judge(trim($path), self::READ);
+
+        return $refused === null && $unavailable === null;
     }
 
     /**
-     * The resolved directory a configured value stands for, or null when it may not be used.
-     *
-     * Null as well for an empty value, the default, which has no directory of its own here.
+     * The resolved directory a configured value stands for, when it can be used for the purpose.
      *
      * @param string $path
-     * @return string|null
+     * @param string $purpose self::READ or self::WRITE
+     * @throws FeedStorageUnavailableException When the location is allowed but this host cannot use it
+     * @return string|null Null for an empty value, and for a location the rules refuse: storage then
+     *                     uses var/mageos_aeo
      */
-    public function permittedPath(string $path): ?string
+    public function locate(string $path, string $purpose): ?string
     {
-        [$reason, $resolved] = $this->judge(trim($path));
+        [$refused, $unavailable, $resolved] = $this->judge(trim($path), $purpose);
+        if ($refused !== null || $resolved === '') {
+            return null;
+        }
+        if ($unavailable !== null) {
+            throw new FeedStorageUnavailableException($unavailable);
+        }
 
-        return $reason === null && $resolved !== '' ? $resolved : null;
+        return $resolved;
     }
 
     /**
      * Check a value and explain the refusal, for the admin save path.
+     *
+     * The directory must be readable from where it is saved; whether it is writable is for the
+     * processes that write the feeds to find out, and a rebuild that cannot write says so in the
+     * admin. The admin may run on a web host that only reads the shared directory.
      *
      * @param string $path
      * @throws LocalizedException
@@ -87,45 +119,50 @@ class StorageDirectory
      */
     public function validate(string $path): void
     {
-        $reason = $this->judge(trim($path))[0];
+        [$refused, $unavailable] = $this->judge(trim($path), self::READ);
+        $reason = $refused ?? $unavailable;
         if ($reason !== null) {
             throw new LocalizedException($reason);
         }
     }
 
     /**
-     * Why this path may not be used, or null when it may, with the path resolved.
+     * Why this path may not be used for the purpose, with the path resolved.
      *
      * @param string $path
-     * @return array{0: Phrase|null, 1: string} The reason, and the resolved path ('' when none)
+     * @param string $purpose
+     * @return array{0: Phrase|null, 1: Phrase|null, 2: string} Why the rules refuse the location,
+     *                                                          why this host cannot use it, and the
+     *                                                          resolved path ('' when none)
      */
-    private function judge(string $path): array
+    private function judge(string $path, string $purpose): array
     {
         if ($path === '') {
-            return [null, ''];
+            return [null, null, ''];
         }
 
         if (!str_starts_with($path, '/')) {
-            return [new Phrase('The feed storage directory must be an absolute path.'), ''];
+            return [new Phrase('The feed storage directory must be an absolute path.'), null, ''];
         }
         if (str_contains($path, '..')) {
-            return [new Phrase('The feed storage directory must not contain "..".'), ''];
+            return [new Phrase('The feed storage directory must not contain "..".'), null, ''];
+        }
+        if ($this->hasHiddenSegment($path)) {
+            return [new Phrase('The feed storage directory must not contain hidden directories.'), null, ''];
         }
 
         // Resolve before judging: a symlink under var/ must not stand for a target outside it.
         $resolved = $this->resolve($path);
-        if ($this->hasHiddenSegment($path) || ($resolved !== '' && $this->hasHiddenSegment($resolved))) {
-            return [new Phrase('The feed storage directory must not contain hidden directories.'), $resolved];
-        }
         if ($resolved === '') {
-            return [new Phrase('The feed storage directory does not exist: %1', [$path]), ''];
+            // A mount missing on this host: nothing to judge the location by, and nothing to use.
+            return [null, new Phrase('The feed storage directory does not exist: %1', [$path]), $path];
         }
-        if (!$this->fileDriver->isDirectory($resolved) || !$this->fileDriver->isWritable($resolved)) {
-            return [new Phrase('The feed storage directory is not a writable directory: %1', [$path]), $resolved];
+        if ($this->hasHiddenSegment($resolved)) {
+            return [new Phrase('The feed storage directory must not contain hidden directories.'), null, $resolved];
         }
         $location = $this->rejectLocation($resolved);
         if ($location !== null) {
-            return [$location, $resolved];
+            return [$location, null, $resolved];
         }
         if ($this->isWorldWritable($resolved)) {
             return [
@@ -134,11 +171,35 @@ class StorageDirectory
                     . ' that run Magento.',
                     [$path]
                 ),
+                null,
                 $resolved,
             ];
         }
 
-        return [null, $resolved];
+        return [null, $this->rejectUse($resolved, $path, $purpose), $resolved];
+    }
+
+    /**
+     * Why this host cannot use an allowed directory for the purpose, or null when it can.
+     *
+     * @param string $resolved
+     * @param string $path As configured, for the message
+     * @param string $purpose
+     * @return Phrase|null
+     */
+    private function rejectUse(string $resolved, string $path, string $purpose): ?Phrase
+    {
+        if (!$this->fileDriver->isDirectory($resolved)) {
+            return new Phrase('The feed storage directory is not a directory: %1', [$path]);
+        }
+        if ($purpose === self::WRITE && !$this->fileDriver->isWritable($resolved)) {
+            return new Phrase('The feed storage directory cannot be written to from here: %1', [$path]);
+        }
+        if (!$this->fileDriver->isReadable($resolved)) {
+            return new Phrase('The feed storage directory cannot be read from here: %1', [$path]);
+        }
+
+        return null;
     }
 
     /**
@@ -149,7 +210,14 @@ class StorageDirectory
      */
     private function rejectLocation(string $resolved): ?Phrase
     {
-        if ($this->isWithin($resolved, $this->realRoot(DirectoryList::VAR_DIR))) {
+        $var = $this->realRoot(DirectoryList::VAR_DIR);
+        if ($var !== '' && $resolved === $var) {
+            return new Phrase(
+                'var/ itself cannot be the feed storage directory, as it holds other files too. Use a'
+                . ' directory inside it, such as var/mageos_aeo, or leave the setting empty.'
+            );
+        }
+        if ($this->isWithin($resolved, $var)) {
             return null;
         }
 

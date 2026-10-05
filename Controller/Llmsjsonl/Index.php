@@ -9,6 +9,7 @@ use Magento\Framework\App\ResponseInterface;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\ResultInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedCache;
 use MageOS\Aeo\Model\Feed\FeedDelivery;
@@ -70,7 +71,16 @@ class Index implements HttpGetActionInterface
         }
 
         $storeId = (int) $this->storeManager->getStore()->getId();
-        $file    = $this->feedStorage->open(self::FILE, $storeId);
+        try {
+            $file = $this->feedStorage->open(self::FILE, $storeId);
+        } catch (FeedStorageUnavailableException) {
+            // The storage directory, not the file: a rebuild cannot fix that, so none is queued.
+            $result->setHttpResponseCode(503);
+            $result->setHeader('Retry-After', '300', true);
+            $result->setHeader('Cache-Control', 'no-store', true);
+            $result->setContents('');
+            return $result;
+        }
         if ($file === null) {
             $this->regenerationRequester->request(FeedRegenerator::GROUP_JSONL);
             $result->setHttpResponseCode(503);

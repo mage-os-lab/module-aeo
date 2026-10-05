@@ -176,7 +176,10 @@ class StorageLinkSafetyTest extends TestCase
 
         $this->storage($configured)->deleteStoreDirectory(9003);
 
-        $this->assertFileDoesNotExist($directory, 'The store directory is removed.');
+        // The link is not a file feed storage writes, so it stays, and so does the directory
+        // (issue #6); what it points to is untouched either way.
+        $this->assertFileDoesNotExist($directory . '/llms.txt', 'The feed file is removed.');
+        $this->assertTrue(is_link($directory . '/inner'), 'The link stays: feed storage did not write it.');
         $this->assertOutsideUntouched();
     }
 

@@ -223,50 +223,55 @@ class LinkSafeFilesystemTest extends TestCase
         $this->assertOutsideUntouched();
     }
 
-    public function testRemoveDirectoryRemovesALinkItselfAndNotItsTarget(): void
+    public function testRemoveOwnedRemovesALinkItselfAndNotItsTarget(): void
     {
         symlink($this->outside, $this->storage . '/store_999');
 
-        (new LinkSafeFilesystem())->removeDirectory($this->storage . '/store_999');
+        $this->assertTrue((new LinkSafeFilesystem())->removeOwned($this->storage . '/store_999', ['llms.txt']));
 
         $this->assertFalse(is_link($this->storage . '/store_999'));
         $this->assertOutsideUntouched();
     }
 
-    public function testRemoveDirectoryRemovesFilesAndLinksWithoutFollowingThem(): void
+    public function testRemoveOwnedRemovesTheOwnedFilesAndLinksAndThenTheEmptyDirectory(): void
     {
         mkdir($this->storage . '/store_1');
         file_put_contents($this->storage . '/store_1/llms.txt', 'feed');
-        symlink($this->outside, $this->storage . '/store_1/inner');
+        file_put_contents($this->storage . '/store_1/.abc.tmp', 'half a feed');
         symlink($this->outside . '/secret.txt', $this->storage . '/store_1/llms-full.txt');
 
-        (new LinkSafeFilesystem())->removeDirectory($this->storage . '/store_1');
+        $removed = (new LinkSafeFilesystem())->removeOwned(
+            $this->storage . '/store_1',
+            ['llms.txt', 'llms-full.txt', '.*.tmp']
+        );
 
+        $this->assertTrue($removed);
         $this->assertFileDoesNotExist($this->storage . '/store_1');
         $this->assertOutsideUntouched();
     }
 
-    public function testRemoveDirectoryRefusesOneHoldingADirectoryAndRemovesNothing(): void
+    public function testRemoveOwnedKeepsEverythingElseAndTheDirectoryHoldingIt(): void
     {
+        // Issue #6: a file, a link or a directory feed storage did not write stays, and so does the
+        // directory; a link is never followed.
         mkdir($this->storage . '/store_1/unexpected', 0o750, true);
         file_put_contents($this->storage . '/store_1/llms.txt', 'feed');
+        file_put_contents($this->storage . '/store_1/keep.txt', 'another tool');
+        symlink($this->outside, $this->storage . '/store_1/inner');
 
-        try {
-            (new LinkSafeFilesystem())->removeDirectory($this->storage . '/store_1');
-            $this->fail('A directory holding a directory was removed.');
-        } catch (FileSystemException) {
-            // Refused.
-        }
+        $removed = (new LinkSafeFilesystem())->removeOwned($this->storage . '/store_1', ['llms.txt']);
 
-        $this->assertFileExists($this->storage . '/store_1/llms.txt');
+        $this->assertFalse($removed);
+        $this->assertFileDoesNotExist($this->storage . '/store_1/llms.txt');
+        $this->assertSame('another tool', file_get_contents($this->storage . '/store_1/keep.txt'));
+        $this->assertDirectoryExists($this->storage . '/store_1/unexpected');
+        $this->assertTrue(is_link($this->storage . '/store_1/inner'));
+        $this->assertOutsideUntouched();
     }
 
-    /**
-     * @doesNotPerformAssertions
-     */
-    public function testRemoveDirectoryIgnoresAMissingOne(): void
+    public function testRemoveOwnedIgnoresAMissingOne(): void
     {
-        (new LinkSafeFilesystem())->removeDirectory($this->storage . '/store_404');
+        $this->assertTrue((new LinkSafeFilesystem())->removeOwned($this->storage . '/store_404', ['llms.txt']));
     }
 
     /**

@@ -9,6 +9,7 @@ use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Store\Api\Data\StoreInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Controller\Llms\Index;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedCache;
 use MageOS\Aeo\Model\Feed\FeedDelivery;
@@ -109,6 +110,20 @@ class IndexTest extends TestCase
 
         $this->assertSame(404, $this->code);
         $this->assertSame('120', $this->headers['Retry-After'] ?? null);
+        $this->assertSame('no-store', $this->headers['Cache-Control'] ?? null);
+    }
+
+    public function testUnusableStorageAnswers503AndQueuesNoRebuild(): void
+    {
+        // Issue #7: a rebuild cannot bring a mount back.
+        $this->storage->method('open')->willThrowException(new FeedStorageUnavailableException(__('Not mounted')));
+        $this->requester->expects($this->never())->method('request');
+        $this->delivery->expects($this->never())->method('deliver');
+
+        $this->controller()->execute();
+
+        $this->assertSame(503, $this->code);
+        $this->assertSame('300', $this->headers['Retry-After'] ?? null);
         $this->assertSame('no-store', $this->headers['Cache-Control'] ?? null);
     }
 

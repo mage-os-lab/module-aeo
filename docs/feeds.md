@@ -235,23 +235,39 @@ MageOS_Seo streams the XML sitemaps the same way, a page of the catalogue at a t
 `mageos_aeo/feeds/storage_dir` is empty by default, which means `var/mageos_aeo`.
 Because it is an absolute path set from the admin panel, what it may point at is restricted:
 
-- **inside the installation, `var/` only.** The root itself and every other standard
-  directory — `app/`, `bin/`, `dev/`, `generated/`, `lib/`, `pub/`, `setup/`, `update/`,
-  `vendor/` — are refused, so no configuration value can reach the codebase;
+- **inside the installation, a directory inside `var/` only.** The root itself and every other
+  standard directory — `app/`, `bin/`, `dev/`, `generated/`, `lib/`, `pub/`, `setup/`, `update/`,
+  `vendor/` — are refused, so no configuration value can reach the codebase. `var/` itself is
+  refused too: it holds other files, and the feeds keep a directory per store view in theirs;
 - **no hidden directories** anywhere, in the path as typed or as resolved, so `.git`, `.ssh` and
   friends are unreachable even under `var/`, and a link with a visible name cannot stand for one;
 - no `..`, and the path is resolved before it is judged, so a symlink inside `var/`
   cannot stand for a target outside it. The feeds are then stored in the resolved directory, so
   a link changed after the check does not move them;
-- the directory must already exist and be writable, but **not by every user** (see
-  [Permissions](#permissions)).
+- the directory must already exist, and must **not be writable by every user** (see
+  [Permissions](#permissions)). It needs to be readable where the feeds are served, and writable
+  where they are built: a web server that only reads the shared directory is fine.
+
+Use a directory **dedicated to the feeds**. Cleanup removes only the files the feeds are written
+to — `llms.txt`, `llms-full.txt`, `llms.jsonl`, their temporary files, and the retired
+`hreflang-sitemap*.xml` — and a `store_<id>/` directory only once nothing else is left in it. A
+file of anything else's is never removed, and keeps its directory in place, with a notice in the
+log.
 
 The rules are applied twice: when the value is saved, with the reason shown in the admin, and
-again when it is read — a row can reach `core_config_data` from a data patch, a deployment tool
-or straight from the database, and a directory these rules refuse is never written to however it
-arrived. A refused value is logged and the feeds fall back to `var/mageos_aeo` rather than
-failing. Each rebuild that falls back is shown in the admin as incomplete until the setting is
-fixed: on a multi-server install, the web servers may not see this host's `var/`.
+again each time the setting is used — a row can reach `core_config_data` from a data patch, a
+deployment tool or straight from the database, and a location these rules refuse is never
+written to however it arrived. What happens next depends on what is wrong:
+
+- **The location is refused** (outside `var/` and every declared root, hidden, world-writable):
+  the setting is at fault. It is logged and the feeds fall back to `var/mageos_aeo` rather than
+  failing. Each rebuild that falls back is shown in the admin as incomplete until the setting is
+  fixed: on a multi-server install, the web servers may not see this host's `var/`.
+- **The location is allowed but this server cannot use it** (the directory is missing — a mount
+  that is not there — or cannot be read where a feed is served, or written where it is built):
+  the server is at fault, and nothing falls back. A request answers `503` with `Retry-After` and
+  queues no rebuild, since a rebuild cannot bring a mount back; a rebuild fails and says why in
+  the admin. Each problem is logged at most once every 5 minutes, however many requests meet it.
 
 ### Symbolic links are not followed
 
@@ -324,6 +340,8 @@ Setting it up:
    on the admin node, saving the field is refused there even though cron would have been happy.
 3. **The mount must be writable by the feed writers and readable by PHP-FPM**, per the
    permissions note above, and not writable by every user — a share mounted `0777` is refused.
+   Web servers may mount it read-only; saving the setting from the admin only needs it readable
+   there.
 4. **`bin/magento setup:config:set` will not write this key** — it only handles the options it
    knows about. Add it by editing `env.php`, or through whatever templating your deployment uses.
 5. A single string is accepted as well as a list (`'feed_storage_roots' => '/mnt/shared/feeds'`),

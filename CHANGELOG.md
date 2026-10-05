@@ -53,6 +53,25 @@ before 2026-10-02. Its history up to then is kept in that repository.
   - The work waits for the commit and reads no configuration: during a save the configuration in
     memory is still the old one, so asking whether a feed was enabled gave the old answer.
 
+- **A web server that can only read the shared feed directory serves it**
+  ([#7](https://github.com/mage-os-lab/module-aeo/issues/7)). The storage directory had to be
+  writable even for a request, so a read-only mount was refused, the request looked in `var/` and
+  found nothing, and every request logged an error.
+  - The directory now has to be readable where feeds are served and writable where they are built.
+  - **One this server cannot use** — a missing mount, say — no longer falls back to `var/`. A
+    request answers `503` without queueing a rebuild (a rebuild cannot fix a mount), a rebuild
+    fails and says why in the admin, and the error is logged at most once every 5 minutes.
+  - A location the rules refuse still falls back to `var/mageos_aeo`, as before.
+  - Saving the setting needs the directory readable, not writable, so it can be saved on a web
+    server that only reads it.
+- **Cleanup keeps what the feeds did not write**
+  ([#6](https://github.com/mage-os-lab/module-aeo/issues/6)). Removing a store's feed directory —
+  on store deletion, and for store views that no longer exist — deleted everything in it, so a
+  directory shared with other files lost them.
+  - It now removes only the feed files (`llms.txt`, `llms-full.txt`, `llms.jsonl`, their temporary
+    files, the retired `hreflang-sitemap*.xml`), and the directory only once nothing else is left,
+    with a notice in the log when it stays.
+  - `var/` itself is refused as the storage directory; a directory inside it is fine.
 - **Rebuilds wait for the commit, and use current data**
   ([#8](https://github.com/mage-os-lab/module-aeo/issues/8),
   [#9](https://github.com/mage-os-lab/module-aeo/issues/9)). Fixed in MageOS_Seo 1.2.2, whose
@@ -72,8 +91,10 @@ before 2026-10-02. Its history up to then is kept in that repository.
   `mageos_aeo_refresh_feeds_on_config_delete`, running `Observer\RefreshFeedsOnConfigChange`; they
   were `mageos_aeo_invalidate_llms_on_config_*`, running `InvalidateLlmsTxtCache`.
 - `Model\Feed\FeedStorage::open()` returns the checked file as a `FeedFile`, and its constructor
-  takes `DirectoryList`, the file driver and `LinkSafeFilesystem` in place of the framework's
-  directory factories. The three controllers also take `FeedDelivery`, and `execute()` returns
+  takes `DirectoryList`, the file driver, `LinkSafeFilesystem` and the cache in place of the
+  framework's directory factories. `open()` and `read()` throw
+  `Exception\FeedStorageUnavailableException` when the configured directory cannot be used.
+  `Model\Feed\StorageDirectory::locate()` judges a directory for reading or writing. The three controllers also take `FeedDelivery`, and `execute()` returns
   `ResultInterface|ResponseInterface`.
 - `Model\Feed\LlmsInvalidationPolicy` no longer decides configuration changes;
   `Model\Feed\FeedConfigDependencies` lists what each feed depends on.
