@@ -73,3 +73,16 @@ Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is 
 its meta description. A page not available in this store view is left out.","CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
 Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
 its meta description. A page not available in this store view is left out."
+"The feed storage directory can be written to by every user: %1. Allow only the users that run Magento.","The feed storage directory can be written to by every user: %1. Allow only the users that run Magento."
+"Feed storage does not follow symbolic links, and ""%1"" is one.","Feed storage does not follow symbolic links, and ""%1"" is one."
+"The feed storage directory ""%1"" does not exist.","The feed storage directory ""%1"" does not exist."
+"The feed storage directory ""%1"" can be written to by every user. Allow only the users that run Magento.","The feed storage directory ""%1"" can be written to by every user. Allow only the users that run Magento."
+"The directory ""%1"" could not be created.","The directory ""%1"" could not be created."
+"The file ""%1"" could not be created.","The file ""%1"" could not be created."
+"The file ""%1"" was replaced while it was being created.","The file ""%1"" was replaced while it was being created."
+"A feed file could not be written.","A feed file could not be written."
+"The file ""%1"" could not be put in place.","The file ""%1"" could not be put in place."
+"The file ""%1"" could not be deleted.","The file ""%1"" could not be deleted."
+"The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place.","The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place."
+"The directory ""%1"" could not be deleted.","The directory ""%1"" could not be deleted."
+"The var/ directory could not be resolved.","The var/ directory could not be resolved."

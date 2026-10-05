@@ -60,20 +60,22 @@
     </event>
 
     <!--
-        Configuration. Every way a value reaches the database saves its backend model — the admin's
-        configuration pages and `bin/magento config:set` — so this is the one hook both share. The
-        admin saves every field of a section, changed or not; the policy counts a value only when it
-        changed, and only under the paths that change what the documents show (locale, AI contact,
-        llms settings, URLs). Values config:set locks into app/etc/env.php (its lock-env option)
-        never reach the database, and so are not seen.
+        Configuration, for both feed groups. Every way a value reaches the database saves its
+        backend model — the admin's configuration pages and `bin/magento config:set` — so this is
+        the one hook both share. The admin saves every field of a section, changed or not; only a
+        changed value, or a deleted one ("Use Default"), on a path a feed depends on counts
+        (Model\Feed\FeedConfigDependencies). A document's switch retires it at once, whichever
+        way it goes; a value a feed shows queues that feed's rebuild. Both wait for the commit.
+        Values config:set locks into app/etc/env.php (its lock-env option) never reach the
+        database, and so are not seen.
     -->
     <event name="config_data_save_after">
-        <observer name="mageos_aeo_invalidate_llms_on_config_save"
-                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+        <observer name="mageos_aeo_refresh_feeds_on_config_save"
+                  instance="MageOS\Aeo\Observer\RefreshFeedsOnConfigChange"/>
     </event>
     <event name="config_data_delete_after">
-        <observer name="mageos_aeo_invalidate_llms_on_config_delete"
-                  instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+        <observer name="mageos_aeo_refresh_feeds_on_config_delete"
+                  instance="MageOS\Aeo\Observer\RefreshFeedsOnConfigChange"/>
     </event>
 
     <!--

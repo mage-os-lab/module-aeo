@@ -255,16 +255,18 @@ Don't add URL rewrites for these paths: none is needed. The internal controller 
 These documents are pre-generated to files and served from there; a web request never builds
 one. That machinery is documented once, in
 **[feeds.md](feeds.md)**: the queue consumer and the nightly cron, what triggers a rebuild, the
-24-hour cache policy, where the files are stored (including multi-server deployments and their
-`app/etc/env.php` entry), file permissions, and the `seo:rebuild` command.
+cache policy and the streaming of large files, where the files are stored (including multi-server
+deployments and their `app/etc/env.php` entry), file permissions, and the `seo:rebuild` command.
 
 Worth knowing here: a rebuild of `/llms.txt` and `/llms-full.txt` is queued when the Organisation
 settings or a FAQ change, when a category changes, and when a product is created, deleted or has
 its category or website assignments changed — because the category tree carries product counts.
 Product edits that change nothing in these documents do not queue one. A configuration change
 queues one when it changes something the documents show: the locale, the Customer Support email,
-these documents' own settings (including FAQ Groups), the base URLs (`web/`) or the category URL
-suffix (`catalog/seo/`).
+FAQ Groups, Pages Listed in llms.txt, the return policy, the base URLs (`web/`) or the category URL
+suffix (`catalog/seo/`). Switching a document on or off takes its file and cached responses away
+at once and queues its rebuild; see feeds.md,
+[Switching a document on or off](feeds.md#switching-a-document-on-or-off).
 
 ---
 

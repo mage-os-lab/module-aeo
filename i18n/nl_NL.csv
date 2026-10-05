@@ -64,3 +64,16 @@ Policies,Beleid
 "CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
 Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
 its meta description. A page not available in this store view is left out.","CMS-pagina's die onder Beleid in /llms.txt en /llms-full.txt staan, na de URL retourbeleid (SEO-verkoopbeleid): privacy, voorwaarden, verzending, over ons. Elke pagina staat er met haar titel en metabeschrijving. Een pagina die niet beschikbaar is in deze winkelweergave, wordt weggelaten."
+"The feed storage directory can be written to by every user: %1. Allow only the users that run Magento.","Elke gebruiker kan schrijven in de opslagmap voor feeds: %1. Sta alleen de gebruikers toe waaronder Magento draait."
+"Feed storage does not follow symbolic links, and ""%1"" is one.","De feedopslag volgt geen symbolische koppelingen, en ""%1"" is er een."
+"The feed storage directory ""%1"" does not exist.","De opslagmap voor feeds ""%1"" bestaat niet."
+"The feed storage directory ""%1"" can be written to by every user. Allow only the users that run Magento.","Elke gebruiker kan schrijven in de opslagmap voor feeds ""%1"". Sta alleen de gebruikers toe waaronder Magento draait."
+"The directory ""%1"" could not be created.","De map ""%1"" kon niet worden aangemaakt."
+"The file ""%1"" could not be created.","Het bestand ""%1"" kon niet worden aangemaakt."
+"The file ""%1"" was replaced while it was being created.","Het bestand ""%1"" werd vervangen terwijl het werd aangemaakt."
+"A feed file could not be written.","Een feedbestand kon niet worden geschreven."
+"The file ""%1"" could not be put in place.","Het bestand ""%1"" kon niet op zijn plaats worden gezet."
+"The file ""%1"" could not be deleted.","Het bestand ""%1"" kon niet worden verwijderd."
+"The feed directory ""%1"" holds a directory, which feed storage never creates, so it was left in place.","De feedmap ""%1"" bevat een map, die de feedopslag nooit aanmaakt, en is daarom blijven staan."
+"The directory ""%1"" could not be deleted.","De map ""%1"" kon niet worden verwijderd."
+"The var/ directory could not be resolved.","De map var/ kon niet worden herleid."

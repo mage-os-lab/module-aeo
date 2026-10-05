@@ -26,7 +26,10 @@ use Magento\Framework\Phrase;
  *    which is deployment configuration an administrator cannot edit from the admin panel.
  *
  * Paths are resolved before they are judged, so a symlink inside var/ cannot stand for a target
- * outside it.
+ * outside it, and a link with a visible name cannot stand for a hidden directory (issue #2): the
+ * hidden-directory rule applies to the path as typed and as resolved. A directory every user can
+ * write to is refused too, since anyone could then put a link in it. FeedStorage works on the
+ * resolved path (permittedPath()), so a link swapped after the check does not move it.
  */
 class StorageDirectory
 {
@@ -57,7 +60,22 @@ class StorageDirectory
      */
     public function isAllowed(string $path): bool
     {
-        return $this->reject(trim($path)) === null;
+        return $this->judge(trim($path))[0] === null;
+    }
+
+    /**
+     * The resolved directory a configured value stands for, or null when it may not be used.
+     *
+     * Null as well for an empty value, the default, which has no directory of its own here.
+     *
+     * @param string $path
+     * @return string|null
+     */
+    public function permittedPath(string $path): ?string
+    {
+        [$reason, $resolved] = $this->judge(trim($path));
+
+        return $reason === null && $resolved !== '' ? $resolved : null;
     }
 
     /**
@@ -69,45 +87,68 @@ class StorageDirectory
      */
     public function validate(string $path): void
     {
-        $reason = $this->reject(trim($path));
+        $reason = $this->judge(trim($path))[0];
         if ($reason !== null) {
             throw new LocalizedException($reason);
         }
     }
 
     /**
-     * Why this path may not be used, or null when it may.
+     * Why this path may not be used, or null when it may, with the path resolved.
      *
      * @param string $path
-     * @return Phrase|null
+     * @return array{0: Phrase|null, 1: string} The reason, and the resolved path ('' when none)
      */
-    private function reject(string $path): ?Phrase
+    private function judge(string $path): array
     {
         if ($path === '') {
-            return null;
+            return [null, ''];
         }
 
         if (!str_starts_with($path, '/')) {
-            return new Phrase('The feed storage directory must be an absolute path.');
+            return [new Phrase('The feed storage directory must be an absolute path.'), ''];
         }
         if (str_contains($path, '..')) {
-            return new Phrase('The feed storage directory must not contain "..".');
-        }
-        foreach (explode('/', trim($path, '/')) as $segment) {
-            if (str_starts_with($segment, '.')) {
-                return new Phrase('The feed storage directory must not contain hidden directories.');
-            }
+            return [new Phrase('The feed storage directory must not contain "..".'), ''];
         }
 
         // Resolve before judging: a symlink under var/ must not stand for a target outside it.
         $resolved = $this->resolve($path);
+        if ($this->hasHiddenSegment($path) || ($resolved !== '' && $this->hasHiddenSegment($resolved))) {
+            return [new Phrase('The feed storage directory must not contain hidden directories.'), $resolved];
+        }
         if ($resolved === '') {
-            return new Phrase('The feed storage directory does not exist: %1', [$path]);
+            return [new Phrase('The feed storage directory does not exist: %1', [$path]), ''];
         }
         if (!$this->fileDriver->isDirectory($resolved) || !$this->fileDriver->isWritable($resolved)) {
-            return new Phrase('The feed storage directory is not a writable directory: %1', [$path]);
+            return [new Phrase('The feed storage directory is not a writable directory: %1', [$path]), $resolved];
+        }
+        $location = $this->rejectLocation($resolved);
+        if ($location !== null) {
+            return [$location, $resolved];
+        }
+        if ($this->isWorldWritable($resolved)) {
+            return [
+                new Phrase(
+                    'The feed storage directory can be written to by every user: %1. Allow only the users'
+                    . ' that run Magento.',
+                    [$path]
+                ),
+                $resolved,
+            ];
         }
 
+        return [null, $resolved];
+    }
+
+    /**
+     * Why a resolved directory is in a place feeds may not go, or null when they may.
+     *
+     * @param string $resolved
+     * @return Phrase|null
+     */
+    private function rejectLocation(string $resolved): ?Phrase
+    {
         if ($this->isWithin($resolved, $this->realRoot(DirectoryList::VAR_DIR))) {
             return null;
         }
@@ -175,6 +216,40 @@ class StorageDirectory
         }
 
         return \is_string($resolved) ? $resolved : '';
+    }
+
+    /**
+     * Whether any directory in a path is hidden (starts with a dot).
+     *
+     * @param string $path
+     * @return bool
+     */
+    private function hasHiddenSegment(string $path): bool
+    {
+        foreach (explode('/', trim($path, '/')) as $segment) {
+            if (str_starts_with($segment, '.')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether every user may write to a directory.
+     *
+     * @param string $resolved
+     * @return bool
+     */
+    private function isWorldWritable(string $resolved): bool
+    {
+        try {
+            $stat = $this->fileDriver->stat($resolved);
+        } catch (\Exception) {
+            return true;
+        }
+
+        return ((int) ($stat['mode'] ?? 0) & 0o002) !== 0;
     }
 
     /**

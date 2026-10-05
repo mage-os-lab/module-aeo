@@ -19,9 +19,12 @@ use MageOS\Aeo\Model\Cache\CleaningMode;
 class FeedCache
 {
     /**
-     * Cache lifetime of every served feed: 24 hours for browsers and shared caches.
+     * Cache lifetime of every served feed: 5 minutes for browsers, 24 hours for shared caches.
+     *
+     * Shared caches (Varnish, a CDN, the built-in full page cache) are purged by tag when a feed is
+     * rebuilt or switched off; a browser's copy cannot be purged, so it is kept briefly (issue #4).
      */
-    public const CACHE_CONTROL = 'public, max-age=86400, s-maxage=86400';
+    public const CACHE_CONTROL = 'public, max-age=300, s-maxage=86400';
 
     public const TAG_LLMS       = 'MAGEOS_AEO_LLMS';
     public const TAG_LLMS_FULL  = 'MAGEOS_AEO_LLMS_FULL';

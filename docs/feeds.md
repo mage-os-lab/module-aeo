@@ -86,11 +86,14 @@ No session is started for these requests. A session cookie stops shared caches s
 response at all, and makes PHP emit `Pragma: no-cache` over the policy below; none of these
 endpoints read session state.
 
-Responses are served with `Cache-Control: public, max-age=86400, s-maxage=86400`, so
-browsers, Varnish and the built-in full page cache keep them for **24 hours**. They
-are tagged `MAGEOS_AEO_LLMS` (`/llms.txt`), `MAGEOS_AEO_LLMS_FULL` (`/llms-full.txt`) and
+Responses are served with `Cache-Control: public, max-age=300, s-maxage=86400`, so Varnish,
+CDNs and the built-in full page cache keep them for **24 hours** and browsers for **5 minutes**.
+They are tagged `MAGEOS_AEO_LLMS` (`/llms.txt`), `MAGEOS_AEO_LLMS_FULL` (`/llms-full.txt`) and
 `MAGEOS_AEO_LLMS_JSONL` (`/llms.jsonl`). After rebuilding a feed group, the consumer and the
-cron purge that group's tags, so cached copies are replaced as soon as the new files exist.
+cron purge that group's tags, so cached copies are replaced as soon as the new files exist;
+switching a document on or off purges its tag at once (see
+[below](#switching-a-document-on-or-off)). A browser's copy cannot be purged, which is why it is
+kept for minutes rather than a day.
 (The retired `/hreflang-sitemap.xml` was tagged `MAGEOS_SEO_HREFLANG_SITEMAP`; the upgrade that
 retires it purges that tag once, along with its files.)
 
@@ -98,7 +101,19 @@ retires it purges that tag once, along with its files.)
 > cacheable page with `Pragma: no-cache` and `Cache-Control: max-age=0, must-revalidate`,
 > keeping the real policy in `X-Magento-Cache-Control`. That is core behaviour, not a setting
 > of this module: browsers will re-request the feeds on each visit. Varnish and CDNs receive
-> the 24-hour policy as written.
+> the policy as written.
+
+### Large feeds are streamed
+
+A stored feed of up to 0.5 MiB is answered from memory, so the built-in full page cache can store
+it. A larger one — `/llms.jsonl` of a large catalogue — is sent straight from its file, 4 KiB at a
+time: serving it takes the same memory whatever its size, and a feed larger than PHP's
+`memory_limit` is served rather than ending the request with a fatal error. The response carries
+`Content-Length`, and a `HEAD` request gets the headers only.
+
+The built-in full page cache does not store a streamed feed. It keeps a response as one string,
+which is the memory streaming saves, so with it a large feed is read from disk on every request.
+Varnish and CDNs cache it by its headers, like the smaller ones.
 
 ---
 
@@ -115,7 +130,14 @@ retires it purges that tag once, along with its files.)
 | Mass website assignment change | always | always |
 | Organisation settings saved | always | — |
 | FAQ saved or deleted | always | — |
-| Configuration saved: locale, Customer Support email, the llms settings (`mageos_aeo/llms_txt/`), `web/`, `catalog/seo/` | when the value changes | — |
+| Configuration: locale, Customer Support email, FAQ Groups, Pages Listed in llms.txt, return policy | when the value changes | — |
+| Configuration: `web/` (base URLs), `catalog/seo/` (URL suffixes, category paths) | when the value changes | when the value changes |
+| Configuration: `currency/`, price scope, Display Out of Stock Products | — | when the value changes |
+| A document switched on or off | see [below](#switching-a-document-on-or-off) | see [below](#switching-a-document-on-or-off) |
+
+Configuration counts when it is saved from the admin or with `bin/magento config:set`, or
+removed with "Use Default", at any scope, and only once the save is committed. Values locked
+into `app/etc/env.php` never reach the database, and so are not seen.
 
 Mass actions — the admin grid's "Update attributes", mass enable/disable and mass website
 assignment, and anything else going through `Magento\Catalog\Model\Product\Action` — write
@@ -132,21 +154,41 @@ view, and theirs is gone.
 
 A feed that no store view can build is never queued: `/llms.jsonl` while it is disabled in
 every store view (the default), `/llms.txt` + `/llms-full.txt` when both are disabled
-everywhere. The logic lives in `MageOS\Aeo\Model\Feed\LlmsInvalidationPolicy`.
+everywhere. The one exception is switching a document on or off, below. The logic lives in
+`MageOS\Aeo\Model\Feed\LlmsInvalidationPolicy`, and for configuration in
+`MageOS\Aeo\Model\Feed\FeedConfigDependencies`.
 
 A FAQ or the Organisation queues the llms documents through its model's own save and delete
 events (`mageos_faq_*`, `mageos_seo_organization_*`), so a save from the admin, the REST API, an
 import or a data patch counts alike.
 
 Changes that no event reports — native CSV imports, direct database writes, configuration
-changes — are picked up by the nightly rebuild.
+locked into `app/etc/env.php`, imported currency rates — are picked up by the nightly rebuild.
 
 The XML sitemaps configured under Marketing → Site Map are rebuilt on change through the same
 queue, one kind of page at a time; what queues them is in MageOS_Seo's
 [sitemap.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/sitemap.md#keeping-sitemaps-current).
 
-A feed that is disabled for a store view is removed from that store's directory on the
-next rebuild, so re-enabling it later produces a fresh build rather than an outdated file.
+### Switching a document on or off
+
+Saving **Enable /llms.txt**, **Enable /llms-full.txt** or **Enable /llms.jsonl** with a new value,
+at any scope, or removing a store view's or website's own value, takes that document out of
+service as soon as the save is committed:
+
+- its file is removed for every store view under the scope saved — all of them for the default
+  scope, the website's for a website;
+- its cached responses are purged (its own tag only: switching `/llms.jsonl` leaves the cached
+  `/llms.txt` alone);
+- its group's rebuild is queued, even when no store view has the document enabled any more.
+
+Switched off, nothing can serve the old document, from a file or from a cache. Switched on, the
+file from before — which may list products removed in the meantime — is not served as current;
+the rebuild writes a new one. Until it has run, `/llms.txt` answers `404` and the other two
+`503`, with `Retry-After`. A store view whose own value overrides the change loses its file too,
+until the same rebuild.
+
+Every rebuild also removes a disabled document's file from each store view's directory, which
+covers a switch nothing reported.
 
 ---
 
@@ -176,11 +218,13 @@ Because it is an absolute path set from the admin panel, what it may point at is
 - **inside the installation, `var/` only.** The root itself and every other standard
   directory — `app/`, `bin/`, `dev/`, `generated/`, `lib/`, `pub/`, `setup/`, `update/`,
   `vendor/` — are refused, so no configuration value can reach the codebase;
-- **no hidden directories** anywhere, so `.git`, `.ssh` and friends are unreachable even
-  under `var/`;
+- **no hidden directories** anywhere, in the path as typed or as resolved, so `.git`, `.ssh` and
+  friends are unreachable even under `var/`, and a link with a visible name cannot stand for one;
 - no `..`, and the path is resolved before it is judged, so a symlink inside `var/`
-  cannot stand for a target outside it;
-- the directory must already exist and be writable.
+  cannot stand for a target outside it. The feeds are then stored in the resolved directory, so
+  a link changed after the check does not move them;
+- the directory must already exist and be writable, but **not by every user** (see
+  [Permissions](#permissions)).
 
 The rules are applied twice: when the value is saved, with the reason shown in the admin, and
 again when it is read — a row can reach `core_config_data` from a data patch, a deployment tool
@@ -188,6 +232,27 @@ or straight from the database, and a directory these rules refuse is never writt
 arrived. A refused value is logged and the feeds fall back to `var/mageos_aeo` rather than
 failing. Each rebuild that falls back is shown in the admin as incomplete until the setting is
 fixed: on a multi-server install, the web servers may not see this host's `var/`.
+
+### Symbolic links are not followed
+
+No feed storage operation follows a symbolic link. The storage directory, each `store_<id>/`
+directory and each feed file must be the real thing:
+
+- **a feed file that is a link** is not served: the request answers as for a missing file and
+  queues a rebuild, which replaces the link with the file;
+- **a store directory or the storage directory that is a link** is neither read nor written:
+  requests answer as for a missing file, and the rebuild fails and is shown in the admin;
+- **deleting** removes a link itself, never what it points to. A store directory is emptied file
+  by file, never recursively; one holding a directory, which this module never creates, is left
+  in place and logged.
+
+This includes **`var/mageos_aeo` itself**: to keep the feeds on another disk, set the storage
+directory (below) rather than linking it. `var/` may be a link, since it is resolved first.
+
+PHP cannot open or delete relative to a directory it has already checked (it has no `openat()`),
+so a process able to rename entries in a storage directory could still race an operation, between
+the check and the act. Keeping the storage directories writable only by the users that run
+Magento closes that.
 
 ### Permissions
 
@@ -197,6 +262,11 @@ the consumer and the web server's PHP user must therefore be the same user or sh
 group — Magento's standard file-ownership model. With a custom `storage_dir`, the root
 directory you configure keeps its own permissions; only the `store_<id>/` directories
 below it are set to `0750`.
+
+A storage directory **every user can write to is refused**, since anyone could then put a link
+or a file of their own in it: a configured directory both when the setting is saved and each time
+it is used, and `var/mageos_aeo/` or a `store_<id>/` directory that cannot be set to `0750` — one
+another user owns — when a feed is read or written. Group-writable directories are fine.
 
 ### Storing the feeds outside var/ (multi-server)
 
@@ -233,7 +303,7 @@ Setting it up:
    and a root that cannot be resolved is dropped from the permitted list. If the mount is missing
    on the admin node, saving the field is refused there even though cron would have been happy.
 3. **The mount must be writable by the feed writers and readable by PHP-FPM**, per the
-   permissions note above.
+   permissions note above, and not writable by every user — a share mounted `0777` is refused.
 4. **`bin/magento setup:config:set` will not write this key** — it only handles the options it
    knows about. Add it by editing `env.php`, or through whatever templating your deployment uses.
 5. A single string is accepted as well as a list (`'feed_storage_roots' => '/mnt/shared/feeds'`),

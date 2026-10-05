@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Model\Feed;
 
 use Magento\Catalog\Model\Product;
-use Magento\Framework\App\Config\Value as ConfigValue;
 use Magento\Framework\Event;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Model\Config;
@@ -20,30 +19,13 @@ use MageOS\Seo\Model\Rebuild\ChangeInspector;
  *   recognise — store saves, deletions, category moves, the FAQs, the Organization, unknown events —
  *   counts as relevant: a spare rebuild is cheap, a missed one leaves a document stale until the
  *   nightly cron.
+ *
+ * Configuration changes are not decided here: Observer\RefreshFeedsOnConfigChange handles them, from
+ * the dependencies in FeedConfigDependencies.
  */
 class LlmsInvalidationPolicy
 {
     private const EVENT_PRODUCT_SAVE = 'catalog_product_save_after';
-
-    /**
-     * Configuration that can change what /llms.txt and /llms-full.txt show.
-     *
-     * - general/locale/: the `> Locale:` line;
-     * - trans_email/ident_support/: the AI contact, when the Organization has none
-     *   (Organization\ContactEmail);
-     * - mageos_aeo/llms_txt/: whether each document is written, and the FAQ groups;
-     * - web/: the base URL every link in the documents starts with;
-     * - catalog/seo/: the category URL suffix in the category tree;
-     * - mageos_seo_merchant/return/: the returns policy page in the Policies section.
-     */
-    private const LLMS_CONFIG_PREFIXES = [
-        'general/locale/',
-        'trans_email/ident_support/',
-        'mageos_aeo/llms_txt/',
-        'web/',
-        'catalog/seo/',
-        'mageos_seo_merchant/return/',
-    ];
 
     /**
      * @param StoreManagerInterface $storeManager
@@ -128,8 +110,6 @@ class LlmsInvalidationPolicy
      * rebuild: queuing both documents for every enable or disable is not worth an informational
      * number. Attribute values are never shown.
      *
-     * Configuration matters when a value the documents show changed (LLMS_CONFIG_PREFIXES).
-     *
      * @param string $eventName
      * @param mixed $entity
      * @return bool
@@ -141,9 +121,6 @@ class LlmsInvalidationPolicy
             return $this->changeInspector->isNew($entity)
                 || (bool) $entity->getData('is_changed_categories')
                 || $this->changeInspector->websitesChanged($entity);
-        }
-        if ($entity instanceof ConfigValue) {
-            return $this->changeInspector->isChangedConfigUnder($eventName, $entity, self::LLMS_CONFIG_PREFIXES);
         }
 
         return true;

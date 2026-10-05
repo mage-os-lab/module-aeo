@@ -13,10 +13,9 @@ use MageOS\Seo\Model\Rebuild\Invalidator;
 /**
  * Queues a rebuild of /llms.txt and /llms-full.txt when their source data changes.
  *
- * Registered for category saves, product saves that change category product counts, the
- * configuration the documents show (see LlmsInvalidationPolicy), and the save and delete of a FAQ or
- * of the Organization — through their models' own events, so every way of saving them counts, not
- * only the admin form.
+ * Registered for category saves, product saves that change category product counts, and the save
+ * and delete of a FAQ or of the Organization — through their models' own events, so every way of
+ * saving them counts, not only the admin form. Configuration is RefreshFeedsOnConfigChange's.
  */
 class InvalidateLlmsTxtCache implements ObserverInterface
 {

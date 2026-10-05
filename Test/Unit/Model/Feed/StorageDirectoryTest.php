@@ -107,6 +107,49 @@ class StorageDirectoryTest extends TestCase
         );
     }
 
+    public function testAVisibleAliasOfAHiddenDirectoryIsRefused(): void
+    {
+        // Issue #2: hidden directories were looked for in the path as typed only, so a link with a
+        // visible name was accepted for var/.hidden.
+        symlink($this->root . '/var/.hidden', $this->root . '/var/visible');
+
+        $this->assertFalse($this->storageDirectory()->isAllowed($this->root . '/var/visible'));
+    }
+
+    public function testADirectoryEveryUserCanWriteToIsRefused(): void
+    {
+        // Issue #2: whoever can write to the storage directory can put a link in it.
+        mkdir($this->root . '/var/open');
+        chmod($this->root . '/var/open', 0o777);
+
+        $this->assertFalse($this->storageDirectory()->isAllowed($this->root . '/var/open'));
+    }
+
+    public function testAGroupWritableOrWorldReadableDirectoryIsAllowed(): void
+    {
+        // The web server and the cron or queue user may differ and share a group; 0755 is the
+        // commonest mode of all, and only writing is refused.
+        foreach (['shared' => 0o770, 'readable' => 0o755] as $name => $mode) {
+            mkdir($this->root . '/var/' . $name);
+            chmod($this->root . '/var/' . $name, $mode);
+
+            $this->assertTrue($this->storageDirectory()->isAllowed($this->root . '/var/' . $name), $name);
+        }
+    }
+
+    public function testThePermittedDirectoryIsGivenResolved(): void
+    {
+        // Storage works on the resolved path, so a link swapped after the check cannot move it.
+        symlink($this->root . '/var/mageos_aeo', $this->root . '/var/alias');
+
+        $this->assertSame(
+            $this->root . '/var/mageos_aeo',
+            $this->storageDirectory()->permittedPath(' ' . $this->root . '/var/alias ')
+        );
+        $this->assertNull($this->storageDirectory()->permittedPath($this->root . '/pub'), 'a refused one');
+        $this->assertNull($this->storageDirectory()->permittedPath(''), 'the default, which has no path of its own');
+    }
+
     public function testADirectoryOutsideTheInstallationIsRefusedUnlessDeclared(): void
     {
         $this->assertFalse($this->storageDirectory()->isAllowed($this->outside));

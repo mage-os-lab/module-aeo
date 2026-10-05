@@ -23,7 +23,9 @@ This module was part of [mage-os/module-seo](https://github.com/mage-os-lab/modu
   [docs/feeds.md](docs/feeds.md).
 - **Written in each store view's language**, from the same Organization, locale and FAQ sources the
   structured data uses. See [docs/llms-txt.md](docs/llms-txt.md).
-- **Cacheable** for 24 hours, and served without a session, so shared caches can store them.
+- **Cacheable** for 24 hours in shared caches and 5 minutes in browsers, and served without a
+  session, so shared caches can store them. A feed over 0.5 MiB is streamed from its file rather
+  than read into memory.
 
 `/llms.txt` takes the organization name and description from MageOS_Seo's Organization record —
 **configure it first** under **Marketing → SEO → Organization**, or the documents will be

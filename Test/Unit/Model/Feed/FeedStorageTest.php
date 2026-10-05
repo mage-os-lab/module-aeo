@@ -4,137 +4,96 @@ declare(strict_types=1);
 
 namespace MageOS\Aeo\Test\Unit\Model\Feed;
 
+// phpcs:disable Magento2.Functions.DiscouragedFunction -- the test checks the disk directly
+
 use Magento\Framework\App\Filesystem\DirectoryList;
-use Magento\Framework\Filesystem;
-use Magento\Framework\Filesystem\Directory\ReadFactory;
-use Magento\Framework\Filesystem\Directory\ReadInterface;
-use Magento\Framework\Filesystem\Directory\WriteFactory;
-use Magento\Framework\Filesystem\Directory\WriteInterface;
-use Magento\Framework\Filesystem\DriverPool;
-use Magento\Framework\Filesystem\File\WriteInterface as FileWriteInterface;
+use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Phrase;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Model\Feed\LinkSafeFilesystem;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
-use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Where feed files go and how they are replaced, on real directories.
+ *
+ * What makes a configured directory permitted is StorageDirectoryTest's subject; what a link does
+ * to each operation is LinkSafeFilesystemTest's and the integration StorageLinkSafetyTest's.
+ */
 class FeedStorageTest extends TestCase
 {
     /**
-     * @var Filesystem&Stub
+     * The test's var/.
+     *
+     * @var string
      */
-    private Filesystem&Stub $filesystem;
+    private string $var = '';
 
     /**
-     * @var WriteFactory&Stub
+     * A configured storage directory, outside var/.
+     *
+     * @var string
      */
-    private WriteFactory&Stub $writeFactory;
-
-    /**
-     * @var ReadFactory&Stub
-     */
-    private ReadFactory&Stub $readFactory;
-
-    /**
-     * @var Config&Stub
-     */
-    private Config&Stub $config;
+    private string $custom = '';
 
     protected function setUp(): void
     {
-        $this->filesystem   = $this->createStub(Filesystem::class);
-        $this->writeFactory = $this->createStub(WriteFactory::class);
-        $this->readFactory  = $this->createStub(ReadFactory::class);
-        $this->config       = $this->createStub(Config::class);
+        $base         = (string) realpath((string) sys_get_temp_dir()) . '/mageos-aeo-storage-' . uniqid();
+        $this->var    = $base . '/var';
+        $this->custom = $base . '/shared/feeds';
+        mkdir($this->var, 0o750, true);
+        mkdir($this->custom, 0o750, true);
+    }
+
+    protected function tearDown(): void
+    {
+        (new FileDriver())->deleteDirectory(\dirname($this->var));
     }
 
     public function testWriteReplacesTheFileThroughATemporaryFileInTheSameDirectory(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')
-            ->willReturnMap([[DirectoryList::VAR_DIR, DriverPool::FILE, $writeDir]]);
+        $storage = $this->storage();
+        $storage->write('llms.txt', 1, 'first');
+        $writer = $storage->openForWrite(1);
+        $writer->write('second');
 
-        $temporary = null;
-        $writeDir->expects($this->once())->method('openFile')
-            ->with(
-                $this->callback(static function (string $path) use (&$temporary): bool {
-                    $temporary = $path;
-                    return (bool) preg_match('#^mageos_aeo/store_1/\.[0-9a-f]{12}\.tmp$#', $path);
-                }),
-                'w'
-            )
-            ->willReturn($this->fileHandle());
-        $writeDir->expects($this->once())->method('renameFile')
-            ->with(
-                $this->callback(static function (string $path) use (&$temporary): bool {
-                    return $path === $temporary;
-                }),
-                'mageos_aeo/store_1/llms.txt'
-            );
-        $writeDir->expects($this->never())->method('delete');
-        $writeDir->method('isExist')->willReturn(true);
-        $writeDir->expects($this->never())->method('create');
-        $modes = [];
-        $writeDir->expects($this->exactly(3))->method('changePermissions')->willReturnCallback(
-            static function (string $path, int $mode) use (&$modes): bool {
-                $modes[] = [$path, $mode];
-                return true;
-            }
-        );
+        $temporary = array_values(array_filter(
+            (array) scandir($this->var . '/mageos_aeo/store_1'),
+            static fn ($name): bool => (bool) preg_match('/^\.[0-9a-f]{12}\.tmp$/', (string) $name)
+        ));
+        $this->assertCount(1, $temporary, 'The new content is in a hidden temporary file.');
+        $this->assertSame('first', $storage->read('llms.txt', 1), 'The served file is the old one until the commit.');
 
-        $this->storage()->write('llms.txt', 1, 'the-body');
+        $writer->commit('llms.txt');
 
-        $this->assertSame(
-            [
-                ['mageos_aeo', 0o750],
-                ['mageos_aeo/store_1', 0o750],
-                ['mageos_aeo/store_1/llms.txt', 0o640],
-            ],
-            $modes
-        );
+        $this->assertSame('second', $storage->read('llms.txt', 1));
+        $this->assertSame(['.', '..', 'llms.txt'], scandir($this->var . '/mageos_aeo/store_1'));
     }
 
-    public function testMissingDirectoriesAreCreatedBeforeWriting(): void
+    public function testDirectoriesAndFilesGetTheFeedModes(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('isExist')->willReturn(false);
+        mkdir($this->var . '/mageos_aeo', 0o777);
+        chmod($this->var . '/mageos_aeo', 0o777);
 
-        $calls = [];
-        $writeDir->method('create')->willReturnCallback(
-            static function (string $path) use (&$calls): bool {
-                $calls[] = "create {$path}";
-                return true;
-            }
-        );
-        $writeDir->expects($this->once())->method('openFile')->willReturnCallback(
-            function () use (&$calls): FileWriteInterface {
-                $calls[] = 'open';
-                return $this->fileHandle();
-            }
-        );
+        $this->storage()->write('llms.txt', 1, 'feed');
 
-        $this->storage()->write('llms.txt', 1, 'the-body');
-
-        $this->assertSame(['create mageos_aeo', 'create mageos_aeo/store_1', 'open'], $calls);
+        $this->assertSame(0o750, fileperms($this->var . '/mageos_aeo') & 0o777, 'An existing directory converges.');
+        $this->assertSame(0o750, fileperms($this->var . '/mageos_aeo/store_1') & 0o777);
+        $this->assertSame(0o640, fileperms($this->var . '/mageos_aeo/store_1/llms.txt') & 0o777);
     }
 
-    public function testPermissionFailuresDoNotFailTheWrite(): void
+    public function testAConfiguredDirectoryIsUsedWithoutThePrefixAndKeepsItsOwnMode(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('isExist')->willReturn(true);
-        $writeDir->method('changePermissions')->willThrowException(new \RuntimeException('chmod denied'));
-        $writeDir->method('openFile')->willReturn($this->fileHandle());
-        $writeDir->expects($this->once())->method('renameFile');
+        chmod($this->custom, 0o770);
 
-        $this->storage()->write('llms.txt', 1, 'the-body');
+        $this->storage($this->custom)->write('llms.txt', 1, 'feed');
+
+        $this->assertSame('feed', file_get_contents($this->custom . '/store_1/llms.txt'));
+        $this->assertSame(0o770, fileperms($this->custom) & 0o777);
+        $this->assertDirectoryDoesNotExist($this->var . '/mageos_aeo');
     }
 
     public function testADirectoryTheInstallationDoesNotPermitIsIgnored(): void
@@ -142,261 +101,176 @@ class FeedStorageTest extends TestCase
         // The admin field is validated on save, but a configuration row can arrive by other
         // routes — a data patch, a deployment tool, a direct database write — so the value is
         // checked again here. Refusing it falls back to var/mageos_aeo rather than failing.
-        $this->config->method('getFeedStorageDir')->willReturn('/etc');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')
-            ->willReturnMap([[DirectoryList::VAR_DIR, DriverPool::FILE, $writeDir]]);
-        // The mageos_aeo/ prefix is used only for the default location, so its presence below is
-        // what shows /etc was never handed to the write factory.
-        $writeDir->method('read')->willReturnMap([['mageos_aeo/store_1', ['mageos_aeo/store_1/llms.txt']]]);
-        $writeDir->expects($this->once())->method('delete')->with('mageos_aeo/store_1/llms.txt');
+        $this->storage('/etc', false)->write('llms.txt', 1, 'feed');
 
-        $this->storage(false)->deleteForStore('llms.txt', 1);
+        $this->assertSame('feed', file_get_contents($this->var . '/mageos_aeo/store_1/llms.txt'));
     }
 
     public function testFallingBackFromARefusedDirectoryIsReportedToTheRebuildsUnderWay(): void
     {
         // On a multi-server install the web servers may not see this host's var/, so the admin
         // is told rather than only the log.
-        $this->config->method('getFeedStorageDir')->willReturn('/etc');
-        $this->filesystem->method('getDirectoryWrite')->willReturn($this->emptyDirectory());
         $problemLog = $this->createMock(ProblemLog::class);
         $problemLog->expects($this->atLeastOnce())->method('degradedWhileRebuilding')
             ->with($this->callback(
                 static fn (Phrase $reason): bool => str_contains($reason->getText(), 'var/mageos_aeo')
             ));
 
-        $this->storage(false, $problemLog)->deleteForStore('llms.txt', 1);
+        $this->storage('/etc', false, $problemLog)->deleteForStore('llms.txt', 1);
     }
 
     public function testAPermittedDirectoryReportsNothing(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('/srv/feeds');
-        $this->writeFactory->method('create')->willReturn($this->emptyDirectory());
         $problemLog = $this->createMock(ProblemLog::class);
         $problemLog->expects($this->never())->method('degradedWhileRebuilding');
 
-        $this->storage(true, $problemLog)->deleteForStore('llms.txt', 1);
+        $this->storage($this->custom, true, $problemLog)->deleteForStore('llms.txt', 1);
     }
 
-    /**
-     * A storage directory with nothing in it.
-     *
-     * @return WriteInterface
-     */
-    private function emptyDirectory(): WriteInterface
+    public function testAFailedWriteRemovesTheTemporaryFileRethrowsAndLeavesTheServedFile(): void
     {
-        $directory = $this->createStub(WriteInterface::class);
-        $directory->method('read')->willReturn([]);
+        $storage = $this->storage();
+        $storage->write('llms.txt', 1, 'served');
+        // Renaming a file over a directory fails.
+        mkdir($this->var . '/mageos_aeo/store_1/llms-full.txt');
 
-        return $directory;
+        try {
+            $storage->write('llms-full.txt', 1, 'new');
+            $this->fail('The failed rename was not reported.');
+        } catch (\Magento\Framework\Exception\FileSystemException) {
+            // Reported.
+        }
+
+        $this->assertSame(['.', '..', 'llms-full.txt', 'llms.txt'], scandir($this->var . '/mageos_aeo/store_1'));
+        $this->assertSame('served', $storage->read('llms.txt', 1));
     }
 
-    public function testWriteUsesCustomDirectoryWithoutThePrefix(): void
+    public function testReadIsNullWithoutAFile(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('/shared/feeds');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->writeFactory->method('create')
-            ->willReturnMap([['/shared/feeds', DriverPool::FILE, null, null, $writeDir]]);
-        $filesystem = $this->createMock(Filesystem::class);
-        $filesystem->expects($this->never())->method('getDirectoryWrite');
-        $this->filesystem = $filesystem;
+        $this->assertNull($this->storage()->read('llms.txt', 1), 'no storage directory yet');
 
-        $writeDir->expects($this->once())->method('openFile')
-            ->with($this->stringStartsWith('store_1/.'), 'w')
-            ->willReturn($this->fileHandle());
-        $writeDir->expects($this->once())->method('renameFile')
-            ->with($this->stringStartsWith('store_1/.'), 'store_1/llms.txt');
-        // The configured storage root itself is left alone.
-        $writeDir->method('isExist')->willReturn(true);
-        $modes = [];
-        $writeDir->method('changePermissions')->willReturnCallback(
-            static function (string $path, int $mode) use (&$modes): bool {
-                $modes[] = [$path, $mode];
-                return true;
-            }
-        );
-
-        $this->storage()->write('llms.txt', 1, 'the-body');
-
-        $this->assertSame([['store_1', 0o750], ['store_1/llms.txt', 0o640]], $modes);
+        $this->storage()->write('llms.txt', 1, 'feed');
+        $this->assertNull($this->storage()->read('llms-full.txt', 1), 'no such file');
     }
 
-    public function testFailedWriteRemovesTheTemporaryFileAndRethrows(): void
+    public function testOpenGivesTheFileAndItsSize(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
+        $this->storage()->write('llms.jsonl', 1, "{}\n{}\n");
 
-        $writeDir->method('openFile')->willReturn($this->fileHandle());
-        $writeDir->method('renameFile')->willThrowException(new \RuntimeException('rename failed'));
-        $writeDir->method('isExist')->willReturn(true);
-        $writeDir->expects($this->once())->method('delete')
-            ->with($this->stringStartsWith('mageos_aeo/store_1/.'));
+        $file = $this->storage()->open('llms.jsonl', 1);
 
-        $this->expectExceptionMessage('rename failed');
-        $this->storage()->write('llms.txt', 1, 'the-body');
-    }
-
-    public function testReadReturnsContentWhenFileExists(): void
-    {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $readDir = $this->createStub(ReadInterface::class);
-        $this->filesystem->method('getDirectoryRead')
-            ->willReturnMap([[DirectoryList::VAR_DIR, DriverPool::FILE, $readDir]]);
-        $readDir->method('isFile')->willReturnMap([['mageos_aeo/store_1/llms.txt', true]]);
-        $readDir->method('readFile')->willReturnMap([['mageos_aeo/store_1/llms.txt', null, null, 'the-body']]);
-
-        $this->assertSame('the-body', $this->storage()->read('llms.txt', 1));
-    }
-
-    public function testReadReturnsNullWhenFileMissing(): void
-    {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $readDir = $this->createStub(ReadInterface::class);
-        $this->filesystem->method('getDirectoryRead')->willReturn($readDir);
-        $readDir->method('isFile')->willReturn(false);
-
-        $this->assertNull($this->storage()->read('llms.txt', 1));
-    }
-
-    public function testReadReturnsNullOnFilesystemException(): void
-    {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $readDir = $this->createStub(ReadInterface::class);
-        $this->filesystem->method('getDirectoryRead')->willReturn($readDir);
-        $readDir->method('isFile')->willThrowException(new \RuntimeException('io'));
-
-        $this->assertNull($this->storage()->read('llms.txt', 1));
+        $this->assertNotNull($file);
+        $this->assertSame(6, $file->size());
+        $this->assertSame("{}\n{}\n", $file->contents());
     }
 
     public function testDeleteForStoreScopesTheGlobToOneStore(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
+        $storage = $this->storage();
+        foreach (['llms.txt', 'llms-full.txt', 'llms.jsonl'] as $file) {
+            $storage->write($file, 2, 'feed');
+            $storage->write($file, 3, 'feed');
+        }
 
-        // The store's directory is read and the entries are matched here, so the listing is
-        // never one the framework cached earlier in the process.
-        $writeDir->method('read')->willReturnMap([[
-            'mageos_aeo/store_2',
-            [
-                'mageos_aeo/store_2/llms.txt',
-                'mageos_aeo/store_2/llms-full.txt',
-                // Another store's files are in another directory; other feeds do not match.
-                'mageos_aeo/store_2/llms.jsonl',
-            ],
-        ]]);
-        $deleted = [];
-        $writeDir->expects($this->exactly(2))->method('delete')->willReturnCallback(
-            static function (string $path) use (&$deleted): bool {
-                $deleted[] = $path;
-                return true;
-            }
-        );
+        $storage->deleteForStore('llms*.txt', 2);
 
-        $this->storage()->deleteForStore('llms*.txt', 2);
-
-        $this->assertSame(['mageos_aeo/store_2/llms.txt', 'mageos_aeo/store_2/llms-full.txt'], $deleted);
+        $this->assertSame(['.', '..', 'llms.jsonl'], scandir($this->var . '/mageos_aeo/store_2'));
+        $this->assertCount(5, (array) scandir($this->var . '/mageos_aeo/store_3'), 'Another store keeps its files.');
     }
 
     public function testListStoreDirectoriesReturnsTheStoreIdsThatHaveOne(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createStub(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('read')->willReturnMap([[
-            'mageos_aeo',
-            [
-                'mageos_aeo/store_1',
-                'mageos_aeo/store_12',
-                // Anything that is not a store directory is ignored.
-                'mageos_aeo/store_notanumber',
-                'mageos_aeo/README.md',
-            ],
-        ]]);
+        $this->assertSame([], $this->storage()->listStoreDirectories(), 'no storage directory yet');
+
+        mkdir($this->var . '/mageos_aeo/store_12', 0o750, true);
+        mkdir($this->var . '/mageos_aeo/store_1');
+        // Anything that is not a store directory is ignored.
+        mkdir($this->var . '/mageos_aeo/store_notanumber');
+        mkdir($this->var . '/mageos_aeo/store_7.moved');
+        mkdir($this->var . '/mageos_aeo/old_store_8');
+        file_put_contents($this->var . '/mageos_aeo/README.md', 'x');
 
         $this->assertSame([1, 12], $this->storage()->listStoreDirectories());
     }
 
-    public function testListStoreDirectoriesIsEmptyOnFilesystemException(): void
-    {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createStub(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('read')->willThrowException(new \RuntimeException('io'));
-
-        $this->assertSame([], $this->storage()->listStoreDirectories());
-    }
-
     public function testDeleteStoreDirectoryRemovesOnlyThatStoresDirectory(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('isExist')->willReturnMap([['mageos_aeo/store_3', true]]);
-        $writeDir->expects($this->once())->method('delete')->with('mageos_aeo/store_3');
+        $storage = $this->storage();
+        $storage->write('llms.txt', 3, 'feed');
+        $storage->write('llms.txt', 4, 'feed');
 
-        $this->storage()->deleteStoreDirectory(3);
+        $storage->deleteStoreDirectory(3);
+        $storage->deleteStoreDirectory(5);
+
+        $this->assertSame([4], $storage->listStoreDirectories());
     }
 
-    public function testDeleteStoreDirectoryIgnoresAMissingDirectory(): void
+    public function testALinkInPlaceOfTheStorageDirectoryIsNeverUsed(): void
     {
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createMock(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('isExist')->willReturn(false);
-        $writeDir->expects($this->never())->method('delete');
+        // Issue #2: var/mageos_aeo as a link to a directory with a real store directory in it.
+        $outside = \dirname($this->var) . '/outside';
+        mkdir($outside . '/store_1', 0o750, true);
+        file_put_contents($outside . '/store_1/llms.txt', 'outside');
+        symlink($outside, $this->var . '/mageos_aeo');
+        $storage = $this->storage();
 
-        $this->storage()->deleteStoreDirectory(3);
+        $this->assertNull($storage->read('llms.txt', 1));
+        $this->assertSame([], $storage->listStoreDirectories());
+        $storage->deleteForStore('llms*', 1);
+        $storage->deleteStoreDirectory(1);
+        try {
+            $storage->write('llms.txt', 2, 'feed');
+            $this->fail('A write through a linked storage directory was not refused.');
+        } catch (\Magento\Framework\Exception\FileSystemException) {
+            // Refused.
+        }
+
+        $this->assertSame('outside', file_get_contents($outside . '/store_1/llms.txt'));
+        $this->assertDirectoryDoesNotExist($outside . '/store_2');
+        unlink($this->var . '/mageos_aeo');
+    }
+
+    public function testAFailedDeletionIsLoggedNotThrown(): void
+    {
+        // The store view is already deleted when this runs; a failure must not surface there.
+        mkdir($this->var . '/mageos_aeo/store_3/unexpected', 0o750, true);
+        $logger = $this->createMock(LoggerInterface::class);
+        $logger->expects($this->once())->method('warning')->with($this->stringContains('holds a directory'));
+
+        $this->storage('', true, null, $logger)->deleteStoreDirectory(3);
+
+        $this->assertDirectoryExists($this->var . '/mageos_aeo/store_3/unexpected');
     }
 
     /**
-     * @doesNotPerformAssertions
-     */
-    public function testDeleteStoreDirectorySwallowsFilesystemErrors(): void
-    {
-        // The store view is already deleted when this runs; a failure here must not surface.
-        $this->config->method('getFeedStorageDir')->willReturn('');
-        $writeDir = $this->createStub(WriteInterface::class);
-        $this->filesystem->method('getDirectoryWrite')->willReturn($writeDir);
-        $writeDir->method('isExist')->willThrowException(new \RuntimeException('io'));
-
-        $this->storage()->deleteStoreDirectory(3);
-    }
-
-    /**
-     * A file handle that accepts whatever is written to it.
+     * Storage over the test's var/, with a configured directory if given.
      *
-     * @return FileWriteInterface
-     */
-    private function fileHandle(): FileWriteInterface
-    {
-        return $this->createStub(FileWriteInterface::class);
-    }
-
-    /**
-     * Build the storage from the current collaborators.
-     *
-     * The configured directory is permitted unless a test says otherwise; what makes a directory
-     * permitted at all is StorageDirectoryTest's subject, not this one's.
-     *
-     * @param bool $directoryAllowed
+     * @param string $configured
+     * @param bool $permitted Whether the installation permits the configured directory
      * @param ProblemLog|null $problemLog
+     * @param LoggerInterface|null $logger
      * @return FeedStorage
      */
-    private function storage(bool $directoryAllowed = true, ?ProblemLog $problemLog = null): FeedStorage
-    {
+    private function storage(
+        string $configured = '',
+        bool $permitted = true,
+        ?ProblemLog $problemLog = null,
+        ?LoggerInterface $logger = null
+    ): FeedStorage {
+        $directoryList = $this->createStub(DirectoryList::class);
+        $directoryList->method('getPath')->willReturnMap([[DirectoryList::VAR_DIR, $this->var]]);
+        $config = $this->createStub(Config::class);
+        $config->method('getFeedStorageDir')->willReturn($configured);
         $storageDirectory = $this->createStub(StorageDirectory::class);
-        $storageDirectory->method('isAllowed')->willReturn($directoryAllowed);
+        $storageDirectory->method('permittedPath')->willReturn($permitted ? $configured : null);
 
         return new FeedStorage(
-            $this->filesystem,
-            $this->writeFactory,
-            $this->readFactory,
-            $this->config,
+            $directoryList,
+            new FileDriver(),
+            new LinkSafeFilesystem(),
+            $config,
             $storageDirectory,
-            $this->createStub(LoggerInterface::class),
+            $logger ?? $this->createStub(LoggerInterface::class),
             $problemLog ?? $this->createStub(ProblemLog::class)
         );
     }

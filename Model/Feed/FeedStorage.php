@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Model\Feed;
 
 use Magento\Framework\App\Filesystem\DirectoryList;
-use Magento\Framework\Filesystem;
-use Magento\Framework\Filesystem\Directory\ReadFactory;
-use Magento\Framework\Filesystem\Directory\ReadInterface;
-use Magento\Framework\Filesystem\Directory\WriteFactory;
-use Magento\Framework\Filesystem\Directory\WriteInterface;
+use Magento\Framework\Exception\FileSystemException;
+use Magento\Framework\Filesystem\Driver\File as FileDriver;
+use Magento\Framework\Phrase;
 use MageOS\Aeo\Model\Config;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
@@ -22,6 +20,11 @@ use Psr\Log\LoggerInterface;
  * configured (mageos_aeo/feeds/storage_dir) so multi-server deployments
  * can point web servers and the cron/consumer host at a shared mount — var/ is
  * host-local on scaled setups.
+ *
+ * No operation follows a symbolic link (issue #2). Each one resolves the storage directory once and
+ * works from that path; the storage directory, the store directories and the feed files must be the
+ * real thing, not links, and a link where one should be is refused, or removed itself, never
+ * followed (LinkSafeFilesystem). A directory every user can write to is refused as well.
  */
 class FeedStorage
 {
@@ -34,60 +37,28 @@ class FeedStorage
     private const FILE_MODE = 0o640;
 
     /**
-     * Feed directories: owner full access, group enter/list, nothing for others. This also
-     * covers the moment between a rename and the file mode being applied.
+     * Feed directories: owner full access, group enter/list, nothing for others.
      */
     private const DIRECTORY_MODE = 0o750;
 
     /**
-     * @param Filesystem $filesystem
-     * @param WriteFactory $writeFactory
-     * @param ReadFactory $readFactory
+     * @param DirectoryList $directoryList
+     * @param FileDriver $fileDriver
+     * @param LinkSafeFilesystem $linkSafeFilesystem
      * @param Config $aeoConfig
      * @param StorageDirectory $storageDirectory
      * @param LoggerInterface $logger
      * @param ProblemLog $problemLog Injected as a proxy: storefront reads never need it
      */
     public function __construct(
-        private readonly Filesystem       $filesystem,
-        private readonly WriteFactory     $writeFactory,
-        private readonly ReadFactory      $readFactory,
-        private readonly Config           $aeoConfig,
-        private readonly StorageDirectory $storageDirectory,
-        private readonly LoggerInterface  $logger,
-        private readonly ProblemLog       $problemLog
+        private readonly DirectoryList      $directoryList,
+        private readonly FileDriver         $fileDriver,
+        private readonly LinkSafeFilesystem $linkSafeFilesystem,
+        private readonly Config             $aeoConfig,
+        private readonly StorageDirectory   $storageDirectory,
+        private readonly LoggerInterface    $logger,
+        private readonly ProblemLog         $problemLog
     ) {
-    }
-
-    /**
-     * The configured storage directory, or none when the installation does not permit it.
-     *
-     * The admin field is validated on save, but a configuration row can arrive another way — a
-     * data patch, a deployment tool, a direct database write — so the value is checked again here,
-     * where it turns into a directory handle. Refusing it falls back to var/mageos_aeo rather than
-     * failing: the feeds keep working, in the one place every installation can write. A rebuild
-     * that falls back is shown to the admin as incomplete until the setting is fixed.
-     *
-     * @return string
-     */
-    private function configuredDirectory(): string
-    {
-        $configured = $this->aeoConfig->getFeedStorageDir();
-        if ($configured === '' || $this->storageDirectory->isAllowed($configured)) {
-            return $configured;
-        }
-
-        $this->logger->error(
-            'MageOS_Aeo: the configured feed storage directory is not permitted and was ignored;'
-            . ' falling back to var/mageos_aeo.',
-            ['storage_dir' => $configured]
-        );
-        // On a multi-server install the web servers may not see var/ of the host that rebuilds.
-        $this->problemLog->degradedWhileRebuilding(
-            __('The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.')
-        );
-
-        return '';
     }
 
     /**
@@ -100,7 +71,7 @@ class FeedStorage
      * @param string $fileName
      * @param int $storeId
      * @param string $content
-     * @throws \Magento\Framework\Exception\FileSystemException
+     * @throws FileSystemException
      * @return void
      */
     public function write(string $fileName, int $storeId, string $content): void
@@ -122,56 +93,68 @@ class FeedStorage
      * The document is streamed out (llms.jsonl, a line per product) instead of held in memory;
      * the served file name is given to commit(), and the file appears only then.
      *
+     * The storage directory and the store directory are created when missing, and given the feed
+     * directory mode — re-applied on every write, so directories made before this policy, or by
+     * another tool, converge on it. A configured storage directory is left as it is. Changing the
+     * mode of a directory another user owns fails and is ignored, unless it leaves the directory
+     * writable by every user, which is refused.
+     *
      * @param int $storeId
-     * @throws \Magento\Framework\Exception\FileSystemException
+     * @throws FileSystemException When a storage directory is a link, or not safe to write to
      * @return FeedFileWriter
      */
     public function openForWrite(int $storeId): FeedFileWriter
     {
-        $dir = $this->getWrite();
-        $this->prepareDirectories($dir, $storeId);
+        [$root, $isDefault] = $this->root();
+        if ($isDefault) {
+            $this->linkSafeFilesystem->ensureDirectory($root, self::DIRECTORY_MODE);
+        } else {
+            $this->linkSafeFilesystem->assertDirectory($root);
+        }
+        $directory = $this->storeDirectory($root, $storeId);
+        $this->linkSafeFilesystem->ensureDirectory($directory, self::DIRECTORY_MODE);
 
         return new FeedFileWriter(
-            $dir,
+            $this->linkSafeFilesystem,
+            $directory,
             // Hidden and ".tmp"-suffixed: no served file name or cleanup pattern can match it.
-            $this->path('.' . bin2hex(random_bytes(6)) . '.tmp', $storeId),
-            $this->prefix() . 'store_' . $storeId,
+            '.' . bin2hex(random_bytes(6)) . '.tmp',
             self::FILE_MODE
         );
     }
 
     /**
-     * Create the store directory (and the default base directory) with the feed directory mode.
+     * Open a feed file for a store, or null when there is none to serve.
      *
-     * The mode is re-applied on every write so directories created before this policy, or by
-     * another tool, converge on it. A custom storage root is left as configured. Changing the
-     * mode of a directory owned by another user fails and is ignored.
+     * Null as well for anything but a regular file in safe directories — a link, or a directory
+     * every user can write to — which the rebuild a missing file queues then replaces or reports.
      *
-     * @param WriteInterface $dir
+     * @param string $fileName
      * @param int $storeId
-     * @throws \Magento\Framework\Exception\FileSystemException
-     * @return void
+     * @return FeedFile|null
      */
-    private function prepareDirectories(WriteInterface $dir, int $storeId): void
+    public function open(string $fileName, int $storeId): ?FeedFile
     {
-        $directories = [$this->prefix() . 'store_' . $storeId];
-        if ($this->prefix() !== '') {
-            array_unshift($directories, rtrim($this->prefix(), '/'));
-        }
+        try {
+            [$root]    = $this->root();
+            $directory = $this->storeDirectory($root, $storeId);
+            if (!$this->linkSafeFilesystem->isSafeDirectory($root)
+                || !$this->linkSafeFilesystem->isSafeDirectory($directory)
+            ) {
+                return null;
+            }
 
-        foreach ($directories as $directory) {
-            if (!$dir->isExist($directory)) {
-                $dir->create($directory);
-            }
-            try {
-                $dir->changePermissions($directory, self::DIRECTORY_MODE);
-            } catch (\Exception) { // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch -- best effort
-            }
+            return $this->linkSafeFilesystem->openFile($directory . '/' . $fileName);
+        } catch (\Exception) {
+            return null;
         }
     }
 
     /**
      * Read a feed file for a store, or null when it has not been generated.
+     *
+     * The whole file as a string. The controllers use open() instead, through FeedDelivery, which
+     * streams a large file rather than reading it into memory.
      *
      * @param string $fileName
      * @param int $storeId
@@ -179,20 +162,14 @@ class FeedStorage
      */
     public function read(string $fileName, int $storeId): ?string
     {
-        try {
-            $dir  = $this->getRead();
-            $path = $this->path($fileName, $storeId);
-            if (!$dir->isFile($path)) {
-                return null;
-            }
-            return $dir->readFile($path);
-        } catch (\Exception) {
-            return null;
-        }
+        return $this->open($fileName, $storeId)?->contents();
     }
 
     /**
      * Delete matching feed files for one store.
+     *
+     * Files and links are removed themselves; a store directory that is a link is left alone, as
+     * nothing of this module's is behind it, and the next write refuses it.
      *
      * @param string $fileNamePattern Glob pattern, e.g. "llms*.txt"
      * @param int $storeId
@@ -201,11 +178,24 @@ class FeedStorage
     public function deleteForStore(string $fileNamePattern, int $storeId): void
     {
         try {
-            $dir = $this->getWrite();
-            foreach ($this->search((string) $this->storeDirectory($storeId), $fileNamePattern) as $path) {
-                $dir->delete($path);
+            [$root]    = $this->root();
+            $directory = $this->storeDirectory($root, $storeId);
+            if (!$this->linkSafeFilesystem->isSafeDirectory($root)
+                || !$this->linkSafeFilesystem->isSafeDirectory($directory)
+            ) {
+                return;
             }
-        } catch (\Exception) { // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch -- best-effort cleanup
+
+            foreach ($this->linkSafeFilesystem->names($directory) as $name) {
+                if (fnmatch($fileNamePattern, $name)) {
+                    $this->linkSafeFilesystem->removeFrom($directory, $name);
+                }
+            }
+        } catch (\Exception $e) {
+            $this->logger->warning(
+                'MageOS_Aeo: could not delete feed files: ' . $e->getMessage(),
+                ['store_id' => $storeId, 'pattern' => $fileNamePattern]
+            );
         }
     }
 
@@ -213,7 +203,8 @@ class FeedStorage
      * Delete a store's whole feed directory (best effort).
      *
      * Used when a store view is deleted: nothing rebuilds its files, so without this they stay
-     * on disk forever. A custom storage root keeps its own store_<id>/ directories only.
+     * on disk forever. A custom storage root keeps its own store_<id>/ directories only. A store
+     * directory that is a link is removed itself, never what it points to.
      *
      * @param int $storeId
      * @return void
@@ -221,12 +212,17 @@ class FeedStorage
     public function deleteStoreDirectory(int $storeId): void
     {
         try {
-            $dir       = $this->getWrite();
-            $directory = $this->prefix() . 'store_' . $storeId;
-            if ($dir->isExist($directory)) {
-                $dir->delete($directory);
+            [$root] = $this->root();
+            if (!$this->linkSafeFilesystem->isSafeDirectory($root)) {
+                return;
             }
-        } catch (\Exception) { // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock.DetectedCatch -- best-effort cleanup
+
+            $this->linkSafeFilesystem->removeDirectory($this->storeDirectory($root, $storeId));
+        } catch (\Exception $e) {
+            $this->logger->warning(
+                'MageOS_Aeo: could not delete a feed directory: ' . $e->getMessage(),
+                ['store_id' => $storeId]
+            );
         }
     }
 
@@ -235,21 +231,30 @@ class FeedStorage
      *
      * Used to find directories left behind by store views that no longer exist: deleting a
      * store group or a website removes its store views through a database-level cascade, with
-     * no event to act on.
+     * no event to act on. A link with a store directory's name is listed too, so the cleanup
+     * removes it.
+     *
+     * The directory is read each time: Magento\Framework\Filesystem\Glob memoises its results for
+     * the life of the process, and the queue consumer and the cron rebuild more than once per
+     * process.
      *
      * @return int[]
      */
     public function listStoreDirectories(): array
     {
         try {
-            $root     = $this->storeDirectory(null);
+            [$root] = $this->root();
+            if (!$this->linkSafeFilesystem->isSafeDirectory($root)) {
+                return [];
+            }
+
             $storeIds = [];
-            foreach ($this->search($root, 'store_*') as $path) {
-                $name = substr((string) $path, $root === null ? 0 : \strlen($root) + 1);
+            foreach ($this->linkSafeFilesystem->names($root) as $name) {
                 if (preg_match('/^store_(\d+)$/', $name, $matches) === 1) {
                     $storeIds[] = (int) $matches[1];
                 }
             }
+            sort($storeIds);
 
             return $storeIds;
         } catch (\Exception) {
@@ -258,108 +263,55 @@ class FeedStorage
     }
 
     /**
-     * The storage-relative directory a store view's files live in.
+     * The storage directory every path of one operation starts from, resolved once.
      *
-     * With $storeId null it is the directory those store directories sit in, which is null for a
-     * custom storage root: the configured directory is itself the root, with nothing above it.
+     * The configured directory, resolved, when the installation permits it; otherwise
+     * mageos_aeo/ in the resolved var/. The admin field is validated on save, but a configuration
+     * row can arrive another way — a data patch, a deployment tool, a direct database write — so
+     * the value is checked again here. Refusing it falls back to var/mageos_aeo rather than
+     * failing: the feeds keep working, in the one place every installation can write. A rebuild
+     * that falls back is shown to the admin as incomplete until the setting is fixed.
      *
-     * @param int|null $storeId
-     * @return string|null
+     * @throws FileSystemException When var/ cannot be resolved
+     * @return array{0: string, 1: bool} The directory, and whether it is the default one
      */
-    private function storeDirectory(?int $storeId): ?string
+    private function root(): array
     {
-        if ($storeId !== null) {
-            return $this->prefix() . 'store_' . $storeId;
-        }
-
-        $base = rtrim($this->prefix(), '/');
-
-        return $base === '' ? null : $base;
-    }
-
-    /**
-     * List the storage entries matching a pattern, reading the directory each time.
-     *
-     * Deliberately not WriteInterface::search(): that goes through
-     * Magento\Framework\Filesystem\Glob, which memoises every result for the life of the
-     * process, so a listing taken after this process has written or deleted files is the
-     * listing from before it did. Both the queue consumer and the cron rebuild more than once
-     * per process, and a rebuild lists its own output — files to delete, store directories —
-     * to decide what to remove. (Glob::clearCache() would do, but it does not
-     * exist on every version this module supports, and reading the directory is no more work.)
-     *
-     * @param string|null $directory Storage-relative directory, or null for the storage root
-     * @param string $mask Glob pattern matched against each entry's own name
-     * @throws \Magento\Framework\Exception\FileSystemException
-     * @return string[] Storage-relative paths
-     */
-    private function search(?string $directory, string $mask): array
-    {
-        // read() reports storage-relative paths, so an entry's own name is what follows the
-        // directory it was read from. The directory is always one this class built, which is
-        // why neither end needs taking apart with dirname()/basename().
-        $nameOffset = $directory === null ? 0 : \strlen($directory) + 1;
-
-        $paths = [];
-        foreach ($this->getWrite()->read($directory) as $entry) {
-            $entry = (string) $entry;
-            if (fnmatch($mask, substr($entry, $nameOffset))) {
-                $paths[] = $entry;
+        $configured = $this->aeoConfig->getFeedStorageDir();
+        if ($configured !== '') {
+            $permitted = $this->storageDirectory->permittedPath($configured);
+            if ($permitted !== null) {
+                return [$permitted, false];
             }
+
+            $this->logger->error(
+                'MageOS_Aeo: the configured feed storage directory is not permitted and was ignored;'
+                . ' falling back to var/mageos_aeo.',
+                ['storage_dir' => $configured]
+            );
+            // On a multi-server install the web servers may not see var/ of the host that rebuilds.
+            $this->problemLog->degradedWhileRebuilding(
+                __('The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.')
+            );
         }
 
-        return $paths;
+        $var = $this->fileDriver->getRealPath($this->directoryList->getPath(DirectoryList::VAR_DIR));
+        if (!\is_string($var) || $var === '') {
+            throw new FileSystemException(new Phrase('The var/ directory could not be resolved.'));
+        }
+
+        return [rtrim($var, '/') . '/' . self::DEFAULT_BASE_DIR, true];
     }
 
     /**
-     * Build the storage-relative path of a feed file.
+     * A store view's directory in the storage directory.
      *
-     * @param string $fileName
+     * @param string $root
      * @param int $storeId
      * @return string
      */
-    private function path(string $fileName, int $storeId): string
+    private function storeDirectory(string $root, int $storeId): string
     {
-        return $this->prefix() . 'store_' . $storeId . '/' . $fileName;
-    }
-
-    /**
-     * Path prefix inside the storage root ('' for a custom absolute directory).
-     *
-     * @return string
-     */
-    private function prefix(): string
-    {
-        return $this->configuredDirectory() === '' ? self::DEFAULT_BASE_DIR . '/' : '';
-    }
-
-    /**
-     * Writable handle on the storage root.
-     *
-     * @return WriteInterface
-     */
-    private function getWrite(): WriteInterface
-    {
-        $custom = $this->configuredDirectory();
-        if ($custom !== '') {
-            return $this->writeFactory->create($custom);
-        }
-
-        return $this->filesystem->getDirectoryWrite(DirectoryList::VAR_DIR);
-    }
-
-    /**
-     * Readable handle on the storage root.
-     *
-     * @return ReadInterface
-     */
-    private function getRead(): ReadInterface
-    {
-        $custom = $this->configuredDirectory();
-        if ($custom !== '') {
-            return $this->readFactory->create($custom);
-        }
-
-        return $this->filesystem->getDirectoryRead(DirectoryList::VAR_DIR);
+        return $root . '/store_' . $storeId;
     }
 }

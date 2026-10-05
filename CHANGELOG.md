@@ -12,6 +12,59 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+### Security
+
+- **Feed storage no longer follows symbolic links**
+  ([#2](https://github.com/mage-os-lab/module-aeo/issues/2)). A link in a storage directory could
+  take a read, a write or a deletion outside it: a linked feed file was served, a linked store
+  directory took the write, and removing an orphaned store directory that was a link emptied its
+  target.
+  - Each operation resolves the storage directory once and works from that path.
+  - The storage directory, each `store_<id>/` directory and each feed file must be the real thing.
+    A link is refused, or removed itself, never followed, and a store directory is emptied file by
+    file, never recursively.
+  - **`var/mageos_aeo` as a link is refused too**; set the Storage Directory instead.
+  - The configured Storage Directory is checked for hidden directories as resolved as well as as
+    typed, so a link with a visible name can no longer stand for `var/.hidden`.
+  - A storage directory every user can write to is refused. Group-writable is fine.
+  - What remains: PHP has no `openat()`, so a process able to rename entries in a storage
+    directory could still race an operation. Keep the directories writable only by the users that
+    run Magento ([docs/feeds.md](docs/feeds.md#symbolic-links-are-not-followed)).
+
+### Fixed
+
+- **A large feed no longer exhausts PHP's memory**
+  ([#3](https://github.com/mage-os-lab/module-aeo/issues/3)). Serving a feed read the whole file
+  into a string, so one larger than `memory_limit` ended the request with a fatal error. A feed
+  over 0.5 MiB is now sent from its file, 4 KiB at a time. Smaller ones are answered from memory as
+  before, so the built-in full page cache still stores them; it does not store a streamed one.
+- **Configuration changes reach both feeds, once committed**
+  ([#4](https://github.com/mage-os-lab/module-aeo/issues/4)).
+  - Switching a document on or off — at any scope, or with "Use Default" — removes its files for
+    the store views under that scope, purges its cached responses and queues its rebuild.
+    Switched off, no file or cached response serves the old document; switched on, the file from
+    before is not served as current. Before, nothing happened until a rebuild, and none was queued
+    once no store view had the feed enabled, which is the state a switch-off leaves.
+  - Saving Enable /llms.jsonl queued the llms rebuild instead of llms.jsonl's. The settings
+    llms.jsonl shows now queue its rebuild: `currency/`, the price scope, Display Out of Stock
+    Products, `web/` and `catalog/seo/`. They queued none.
+  - The work waits for the commit and reads no configuration: during a save the configuration in
+    memory is still the old one, so asking whether a feed was enabled gave the old answer.
+
+### Changed
+
+- Browsers keep a feed for 5 minutes: `Cache-Control: public, max-age=300, s-maxage=86400`.
+  Shared caches still keep it for 24 hours and are purged by tag; a browser's copy cannot be.
+- The configuration observers are `mageos_aeo_refresh_feeds_on_config_save` and
+  `mageos_aeo_refresh_feeds_on_config_delete`, running `Observer\RefreshFeedsOnConfigChange`; they
+  were `mageos_aeo_invalidate_llms_on_config_*`, running `InvalidateLlmsTxtCache`.
+- `Model\Feed\FeedStorage::open()` returns the checked file as a `FeedFile`, and its constructor
+  takes `DirectoryList`, the file driver and `LinkSafeFilesystem` in place of the framework's
+  directory factories. The three controllers also take `FeedDelivery`, and `execute()` returns
+  `ResultInterface|ResponseInterface`.
+- `Model\Feed\LlmsInvalidationPolicy` no longer decides configuration changes;
+  `Model\Feed\FeedConfigDependencies` lists what each feed depends on.
+
 ## [1.0.0] — 2026-10-05
 
 ### Added
