@@ -17,7 +17,7 @@ use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
-use MageOS\Aeo\Model\ResourceModel\StockIndexSalability;
+use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Rebuild\ProblemFormatter;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use MageOS\Seo\Model\Rebuild\RetrySchedule;
@@ -95,8 +95,8 @@ class RebuildProblemsTest extends TestCase
     #[DataFixture(ProductFixture::class, as: 'product')]
     public function testAFailedStockLookupShowsLlmsJsonlAsIncompleteUntilACleanRebuild(): void
     {
-        $failing = $this->createStub(StockIndexSalability::class);
-        $failing->method('salable')->willThrowException(new \RuntimeException('Inventory is down'));
+        $failing = $this->createStub(AvailabilityResolver::class);
+        $failing->method('resolveMany')->willThrowException(new \RuntimeException('Inventory is down'));
 
         $this->regeneratorWith($failing)->regenerate(FeedRegenerator::GROUP_JSONL);
 
@@ -127,19 +127,19 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * A regenerator whose llms.jsonl builder reads salability from the given lookup.
+     * A regenerator whose llms.jsonl builder reads availability from the given resolver.
      *
      * Builder and regenerator share the test's problem log: a degradation is only recorded inside
      * the rebuild the same log has open.
      *
-     * @param StockIndexSalability $salability
+     * @param AvailabilityResolver $availability
      * @return FeedRegenerator
      */
-    private function regeneratorWith(StockIndexSalability $salability): FeedRegenerator
+    private function regeneratorWith(AvailabilityResolver $availability): FeedRegenerator
     {
         $objectManager = Bootstrap::getObjectManager();
         $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, [
-            'stockIndexSalability' => $salability,
+            'availabilityResolver' => $availability,
             'problemLog'           => $this->problemLog(),
         ]);
 

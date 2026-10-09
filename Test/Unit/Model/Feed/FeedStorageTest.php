@@ -251,7 +251,7 @@ class FeedStorageTest extends TestCase
     {
         // Issue #7: a mount missing on this host is not "no file yet", and every request meets it.
         // A cache that keeps what it is given, for the two requests.
-        $memory = new class {
+        $memory = new class () {
             /**
              * @var array<string, string>
              */

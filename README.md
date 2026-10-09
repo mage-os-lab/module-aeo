@@ -47,8 +47,8 @@ mount, which takes one entry in each machine's `app/etc/env.php` as well as the 
   - Its Organization, locale and FAQ source pool are what the documents describe.
   - Its admin tab and SEO ACL resource hold this module's settings.
   - Its public-path registry keeps sessions off the documents' URLs.
-- Magento MSI (`Inventory*`) modules: `/llms.jsonl` reads availability through the MSI service
-  contracts.
+- Magento MSI (`Inventory*`) modules: `/llms.jsonl` reads availability from MSI's stock index,
+  through MageOS_Seo's `Model\Product\AvailabilityResolver`.
 
 ---
 

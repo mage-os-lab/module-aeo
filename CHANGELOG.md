@@ -81,10 +81,25 @@ before 2026-10-02. Its history up to then is kept in that repository.
   - A long-running consumer resets the Organization, stock IDs and, after a configuration change,
     the configuration before each build.
   - Indexer lag is documented: see `docs/feeds.md`, "When a rebuild runs".
+- **llms.jsonl offers a product's special price**
+  ([#5](https://github.com/mage-os-lab/module-aeo/issues/5)). The feed's collection never loaded
+  the special price or its dates, so `PriceInfo` saw none and the line had the regular price while
+  the storefront showed the special. The collection now selects `special_price`,
+  `special_from_date` and `special_to_date`, at one more query a page.
+- **A llms.jsonl line can say BackOrder**
+  ([MageOS_Seo #30](https://github.com/mage-os-lab/module-seo/issues/30)). Availability comes from
+  MageOS_Seo's `AvailabilityResolver`, a page of 1,000 products at a time, by the same rules as the
+  product pages: InStock, BackOrder for a product that sells only through backorders, or
+  OutOfStock. A configurable's line says InStock when it is salable at all, as its children aren't
+  loaded here.
 
 ### Changed
 
-- Requires MageOS_Seo `^1.2.2`.
+- Requires MageOS_Seo `^1.2.2`, which now carries the batched `AvailabilityResolver`.
+- **`Model\ResourceModel\StockIndexSalability` is removed**; MageOS_Seo's `AvailabilityResolver`
+  reads the same stock index. `Model\LlmsJsonl\ProductLineBuilder::build()` takes the schema.org
+  availability URI where it took a bool, and `JsonlBuilder` no longer takes the resource model.
+  The module no longer requires `magento/module-inventory-indexer`.
 - Browsers keep a feed for 5 minutes: `Cache-Control: public, max-age=300, s-maxage=86400`.
   Shared caches still keep it for 24 hours and are purged by tag; a browser's copy cannot be.
 - The configuration observers are `mageos_aeo_refresh_feeds_on_config_save` and

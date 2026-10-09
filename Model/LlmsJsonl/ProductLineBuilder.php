@@ -22,9 +22,6 @@ use MageOS\Seo\Service\CurrencyService;
  */
 class ProductLineBuilder
 {
-    private const AVAILABILITY_IN_STOCK = 'https://schema.org/InStock';
-    private const AVAILABILITY_OUT      = 'https://schema.org/OutOfStock';
-
     /**
      * Maximum description length in characters, ellipsis excluded.
      */
@@ -45,15 +42,15 @@ class ProductLineBuilder
     /**
      * Build the JSON-LD Product node for a product.
      *
-     * Salability is passed in explicitly (resolved in one MSI batch call per
-     * collection page by JsonlBuilder) instead of consulting the product's
-     * legacy is_salable state per line.
+     * Availability is passed in (resolved a page of products at a time by JsonlBuilder, through
+     * MageOS_Seo's AvailabilityResolver) rather than looked up per line: InStock, BackOrder or
+     * OutOfStock, a schema.org URI.
      *
      * @param ProductInterface $product
-     * @param bool $isSalable
+     * @param string $availability AvailabilityResolver::IN_STOCK, BACKORDER or OUT_OF_STOCK
      * @return array<string, mixed>
      */
-    public function build(ProductInterface $product, bool $isSalable): array
+    public function build(ProductInterface $product, string $availability): array
     {
         /** @var \Magento\Catalog\Model\Product $product */
         $url = $product->getProductUrl();
@@ -67,15 +64,14 @@ class ProductLineBuilder
             'offers'   => ['@type' => 'Offer'],
         ];
 
-        // PriceInfo amounts are already in the current (display) currency — core
-        // RegularPrice / SpecialPrice::getValue() convert with PriceCurrency — which is
-        // the priceCurrency emitted with them. Converting again would apply the rate twice.
+        // FinalPrice gives the amount the page shows, already in the current (display) currency
+        // emitted with it: converting again would apply the rate twice.
         $price = $this->finalPrice->get($product);
         if ($price !== null) {
             $node['offers']['price']         = $this->currencyService->formatAmountForLlms($price);
             $node['offers']['priceCurrency'] = $this->currencyService->getCurrentCurrencyCode();
         }
-        $node['offers']['availability'] = $isSalable ? self::AVAILABILITY_IN_STOCK : self::AVAILABILITY_OUT;
+        $node['offers']['availability'] = $availability;
         $node['offers']['url']          = $url;
 
         $sku = (string) $product->getSku();

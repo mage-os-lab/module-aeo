@@ -11,7 +11,6 @@ use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\JsonlLineProviderInterface;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
-use MageOS\Aeo\Model\ResourceModel\StockIndexSalability;
 use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use Psr\Log\LoggerInterface;
@@ -20,10 +19,11 @@ use Psr\Log\LoggerInterface;
  * Builds the /llms.jsonl document: one JSON-LD Product node per line for the store's catalog, plus
  * any lines contributed by bridge JsonlLineProviderInterface implementations.
  *
- * The catalog is processed in pages, with URL rewrites loaded with the collection and salability read
- * from the stock index in one query per page (StockIndexSalability), so large catalogs neither
- * exhaust memory nor run a salability lookup per product. Each product's price is still its own
- * PriceInfo, the price a visitor is shown.
+ * The catalog is processed in pages, with URL rewrites loaded with the collection and availability
+ * resolved for the whole page at once by MageOS_Seo's AvailabilityResolver (the stock index, as the
+ * storefront reads it: one or two queries a page), so large catalogs neither exhaust memory nor run
+ * a stock lookup per product. Each product's price is still its own PriceInfo, the price a visitor
+ * is shown, which is why the collection loads the special price attributes PriceInfo reads.
  */
 class JsonlBuilder
 {
@@ -33,7 +33,6 @@ class JsonlBuilder
      * @param CollectionFactory $collectionFactory
      * @param ProductLineBuilder $productLineBuilder
      * @param StoreManagerInterface $storeManager
-     * @param StockIndexSalability $stockIndexSalability
      * @param AvailabilityResolver $availabilityResolver
      * @param LoggerInterface $logger
      * @param ProblemLog $problemLog
@@ -43,7 +42,6 @@ class JsonlBuilder
         private readonly CollectionFactory     $collectionFactory,
         private readonly ProductLineBuilder    $productLineBuilder,
         private readonly StoreManagerInterface $storeManager,
-        private readonly StockIndexSalability  $stockIndexSalability,
         private readonly AvailabilityResolver  $availabilityResolver,
         private readonly LoggerInterface       $logger,
         private readonly ProblemLog            $problemLog,
@@ -65,7 +63,12 @@ class JsonlBuilder
         $collection = $this->collectionFactory->create();
         $collection->setStoreId($storeId);
         $collection->addStoreFilter($storeId);
-        $collection->addAttributeToSelect(['name', 'short_description', 'description', 'sku', 'image']);
+        // The special price and its dates are what PriceInfo's SpecialPrice reads: without them the
+        // regular price was published while the storefront showed the special (issue #5).
+        $collection->addAttributeToSelect([
+            'name', 'short_description', 'description', 'sku', 'image',
+            'special_price', 'special_from_date', 'special_to_date',
+        ]);
         $collection->addAttributeToFilter('status', ['eq' => Status::STATUS_ENABLED]);
         $collection->addAttributeToFilter('visibility', [
             'in' => [Visibility::VISIBILITY_IN_CATALOG, Visibility::VISIBILITY_BOTH],
@@ -82,22 +85,19 @@ class JsonlBuilder
             $collection->setCurPage($page);
             $collection->clear();
 
-            // One salability query per page instead of a lookup per product.
-            $skus = [];
+            $products = [];
             foreach ($collection as $product) {
-                if ($product instanceof ProductInterface && (string) $product->getSku() !== '') {
-                    $skus[] = (string) $product->getSku();
+                if ($product instanceof ProductInterface) {
+                    $products[] = $product;
                 }
             }
-            $salability = $this->resolveSalability($skus, $storeId);
+            // The page's availability at once, instead of a lookup per product.
+            $availability = $this->resolveAvailability($products, $storeId);
 
-            foreach ($collection as $product) {
-                if (!$product instanceof ProductInterface) {
-                    continue;
-                }
+            foreach ($products as $product) {
                 $line = $this->encode($this->productLineBuilder->build(
                     $product,
-                    $salability[(string) $product->getSku()] ?? false
+                    $availability[(string) $product->getSku()] ?? AvailabilityResolver::OUT_OF_STOCK
                 ));
                 if ($line !== '') {
                     yield $line . "\n";
@@ -119,32 +119,29 @@ class JsonlBuilder
     }
 
     /**
-     * Resolve salability for a page of SKUs from the stock index, in one query.
+     * Resolve the availability of a page of products at once.
      *
-     * A SKU the stock index has no row for is not salable. When the lookup fails, every product
-     * in the page is reported not salable (matching AvailabilityResolver's OutOfStock default) and
-     * the failure is logged rather than aborting the whole feed build. The admin is shown the store
-     * view's llms.jsonl as incomplete until a rebuild gets through.
+     * A product the stock index has no row for is out of stock. When the lookup fails, every product
+     * in the page is reported out of stock and the failure is logged rather than aborting the whole
+     * feed build. The admin is shown the store view's llms.jsonl as incomplete until a rebuild gets
+     * through.
      *
-     * @param string[] $skus
+     * @param ProductInterface[] $products
      * @param int $storeId
-     * @return array<string, bool> sku => salable
+     * @return array<string, string> SKU => schema.org availability
      */
-    private function resolveSalability(array $skus, int $storeId): array
+    private function resolveAvailability(array $products, int $storeId): array
     {
-        if (empty($skus)) {
+        if ($products === []) {
             return [];
         }
 
-        $salability = [];
+        $availability = [];
         try {
-            $salability = $this->stockIndexSalability->salable(
-                $skus,
-                $this->availabilityResolver->getCurrentStockId()
-            );
+            $availability = $this->availabilityResolver->resolveMany($products);
         } catch (\Exception $e) {
             $this->logger->error(
-                'MageOS_Aeo: llms.jsonl salability batch failed: ' . $e->getMessage(),
+                'MageOS_Aeo: llms.jsonl stock lookup failed: ' . $e->getMessage(),
                 ['exception' => $e]
             );
             $this->problemLog->degraded(
@@ -154,7 +151,7 @@ class JsonlBuilder
             );
         }
 
-        return $salability;
+        return $availability;
     }
 
     /**

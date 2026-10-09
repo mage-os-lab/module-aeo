@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Test\Unit\Model\LlmsJsonl;
 
 use Magento\Catalog\Model\Product;
+use Magento\Framework\Pricing\Amount\AmountInterface;
 use Magento\Framework\Pricing\Price\PriceInterface;
 use Magento\Framework\Pricing\PriceInfoInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Model\LlmsJsonl\ProductLineBuilder;
+use MageOS\Seo\Model\Config;
+use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Product\FinalPrice;
 use MageOS\Seo\Service\CurrencyService;
 use MageOS\Seo\Test\Unit\Service\CurrencyServices;
@@ -34,8 +37,11 @@ class ProductLineBuilderTest extends TestCase
 
     protected function setUp(): void
     {
+        $displayed = $this->createStub(AmountInterface::class);
+        $displayed->method('getValue')->willReturn(29.99);
         $finalPrice = $this->createStub(PriceInterface::class);
         $finalPrice->method('getValue')->willReturn(29.99);
+        $finalPrice->method('getAmount')->willReturn($displayed);
         $priceInfo = $this->createMock(PriceInfoInterface::class);
         $priceInfo->method('getPrice')->with('final_price')->willReturn($finalPrice);
 
@@ -64,7 +70,7 @@ class ProductLineBuilderTest extends TestCase
         return new ProductLineBuilder(
             $storeManager,
             $currencyService ?? $this->currencyService(),
-            new FinalPrice($this->createStub(LoggerInterface::class))
+            new FinalPrice($this->createStub(LoggerInterface::class), $this->createStub(Config::class))
         );
     }
 
@@ -79,7 +85,7 @@ class ProductLineBuilderTest extends TestCase
         $product->method('getPriceInfo')->willThrowException(new \RuntimeException('No price index'));
         $product->method('getProductUrl')->willReturn('https://example.com/blue-mug.html');
 
-        $offer = $this->builder->build($product, false)['offers'];
+        $offer = $this->builder->build($product, AvailabilityResolver::OUT_OF_STOCK)['offers'];
 
         $this->assertSame(
             [
@@ -93,7 +99,7 @@ class ProductLineBuilderTest extends TestCase
 
     public function testBuildsRequiredFields(): void
     {
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
 
         $this->assertSame('https://schema.org', $node['@context']);
         $this->assertSame('Product', $node['@type']);
@@ -110,17 +116,24 @@ class ProductLineBuilderTest extends TestCase
     {
         // PriceInfo amounts are already in the display currency; a base→display rate
         // of 2 must not be applied to them again.
-        $node = $this->builder(currencyService: $this->currencyService('GBP', 2.0))->build($this->product, true);
+        $node = $this->builder(currencyService: $this->currencyService('GBP', 2.0))
+            ->build($this->product, AvailabilityResolver::IN_STOCK);
 
         $this->assertSame('29.99', $node['offers']['price']);
     }
 
-    public function testOutOfStockAvailability(): void
+    public function testTheAvailabilityGivenIsTheOffersAvailability(): void
     {
-        // Salability is supplied by the caller (batch-resolved via MSI in
-        // JsonlBuilder), never derived from the product itself.
-        $node = $this->builder->build($this->product, false);
-        $this->assertSame('https://schema.org/OutOfStock', $node['offers']['availability']);
+        // Availability is supplied by the caller (resolved a page at a time in JsonlBuilder),
+        // never derived from the product itself; issue #30: a line can say BackOrder.
+        foreach ([
+            AvailabilityResolver::IN_STOCK,
+            AvailabilityResolver::BACKORDER,
+            AvailabilityResolver::OUT_OF_STOCK,
+        ] as $availability) {
+            $node = $this->builder->build($this->product, $availability);
+            $this->assertSame($availability, $node['offers']['availability']);
+        }
     }
 
     public function testLongDescriptionIsCutAtAWordBoundaryOnOneLine(): void
@@ -130,7 +143,7 @@ class ProductLineBuilderTest extends TestCase
             fn (string $m) => $m === 'getShortDescription' ? $long : null
         );
 
-        $description = $this->builder->build($this->product, true)['description'];
+        $description = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK)['description'];
 
         $this->assertStringStartsWith('Hand thrown stoneware glazed mug', $description);
         $this->assertStringEndsWith('…', $description);
@@ -144,7 +157,7 @@ class ProductLineBuilderTest extends TestCase
         $this->product->method('__call')->willReturnCallback(
             fn (string $m) => $m === 'getShortDescription' ? '<p>A <strong>great</strong> mug</p>' : null
         );
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertSame('A great mug', $node['description']);
     }
 
@@ -155,14 +168,14 @@ class ProductLineBuilderTest extends TestCase
         $store->method('getBaseUrl')->with(UrlInterface::URL_TYPE_MEDIA)
             ->willReturn('https://example.com/media/');
 
-        $node = $this->builder($store)->build($this->product, true);
+        $node = $this->builder($store)->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertSame('https://example.com/media/catalog/product/m/u/mug.jpg', $node['image']);
     }
 
     public function testImageOmittedWhenNoSelection(): void
     {
         $this->product->method('getImage')->willReturn('no_selection');
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertArrayNotHasKey('image', $node);
     }
 }

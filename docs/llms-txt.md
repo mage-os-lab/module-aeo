@@ -180,19 +180,29 @@ catalogue, with the host changed to example.com:
 The values:
 
 - `price` is the product's final price in the store view's display currency, the price the
-  storefront shows. It is written with two decimals, a full stop and no thousands separator
-  (`1234.50`) whatever the store's locale, and `priceCurrency` is the current currency code.
-  **When the price is not known, both are left out,** rather than written as `0.00`, which reads as
-  free. The offer keeps its availability and URL. The price is not known when a composite product
-  (configurable, grouped, bundle) is priced 0, which Magento does when no option can price it, or
-  when the lookup throws, which is logged with the SKU. MageOS_Seo's `Model\Product\FinalPrice`
-  decides this here and in the product pages' structured data alike.
-- `availability` is `https://schema.org/InStock` or `https://schema.org/OutOfStock`, by the
-  website's stock in MSI's stock index (`is_salable`, what the category listings filter on), read
-  for 1,000 products at a time. The index does not subtract reservations, orders placed but not yet
-  shipped: a product whose last units are all reserved stays InStock until shipping deducts them.
+  storefront shows: including tax when the store shows prices including tax. It is written with two
+  decimals, a full stop and no thousands separator (`1234.50`) whatever the store's locale, and
+  `priceCurrency` is the current currency code. **When the price is not known, both are left out,**
+  rather than written as `0.00`, which reads as free. The offer keeps its availability and URL. The
+  price is not known when it is 0 — a composite product nothing can price, or a price hidden from
+  the visitor — unless MageOS_Seo's **Publish a Price of Zero** is on, which offers a simple product
+  priced 0 as free; when it is below 0; or when the lookup throws, which is logged with the SKU.
+  MageOS_Seo's `Model\Product\FinalPrice` decides this here and in the product pages' structured
+  data alike.
+- `availability` is `https://schema.org/InStock`, `https://schema.org/BackOrder` or
+  `https://schema.org/OutOfStock`, by the website's stock as the storefront reads it: MSI's stock
+  index, read for 1,000 products at a time by MageOS_Seo's `Model\Product\AvailabilityResolver`.
+  The rules are those of the product pages' structured data (MageOS_Seo's
+  [structured-data.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/structured-data.md#an-offers-availability)):
+  BackOrder for a product that sells only through backorders. Two differences from a product page:
+  - a configurable product's line says InStock when it is salable at all, as its children aren't
+    loaded here;
+  - like the storefront, the index does not subtract reservations, orders placed but not yet
+    shipped: a product whose last units are all reserved stays InStock until shipping deducts them.
+
   When the lookup fails, the products it covered are written as OutOfStock and the failure is
-  logged. Unlike the JSON-LD on product pages, a line has no `BackOrder`.
+  logged, and the admin is shown the store view's llms.jsonl as incomplete until a rebuild gets
+  through.
 
 A product gets a line when it is enabled, assigned to the store view's website, visible in
 *Catalog* or *Catalog, Search*, and in Magento's price index, which the feed reads its products
