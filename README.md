@@ -31,8 +31,10 @@ This module was part of [mage-os/module-seo](https://github.com/mage-os-lab/modu
 **configure it first** under **Marketing → SEO → Organization**, or the documents will be
 incomplete.
 
-**Multi-server deployments** must point the web servers and the cron/consumer host at a shared
-mount, which takes one entry in each machine's `app/etc/env.php` as well as the admin setting — see
+**Multi-server deployments** keep the feeds in Magento's remote storage when it is on — see
+[In Magento's remote storage (S3)](docs/feeds.md#in-magentos-remote-storage-s3). Without it, the
+web servers and the cron/consumer host must share a mount, which takes one entry in each machine's
+`app/etc/env.php` as well as the admin setting — see
 [Storing the feeds outside var/](docs/feeds.md#storing-the-feeds-outside-var-multi-server).
 
 ---

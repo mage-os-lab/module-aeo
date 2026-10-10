@@ -11,10 +11,16 @@ use Magento\Framework\Data\Collection\AbstractDb;
 use Magento\Framework\Model\Context;
 use Magento\Framework\Model\ResourceModel\AbstractResource;
 use Magento\Framework\Registry;
+use Magento\RemoteStorage\Model\Config as RemoteStorageConfig;
+use MageOS\Aeo\Model\Feed\Remote\RemoteStoragePath;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
 
 /**
- * Refuses a feed storage directory the installation does not permit, with the reason.
+ * Refuses a feed storage directory the feeds cannot be kept in, with the reason.
+ *
+ * While Magento's remote storage is on, the value is a path from its root, and is checked as one
+ * (Model\Feed\Remote\RemoteStoragePath); otherwise it is a directory on disk the installation must
+ * permit (Model\Feed\StorageDirectory).
  *
  * The check is repeated when the value is read (see Model\Feed\FeedStorage): a configuration row
  * can be written without passing through here — by a data patch, a deployment tool, or straight
@@ -24,6 +30,8 @@ class FeedStorageDir extends Value
 {
     /**
      * @param StorageDirectory $storageDirectory
+     * @param RemoteStorageConfig $remoteStorageConfig
+     * @param RemoteStoragePath $remoteStoragePath
      * @param Context $context
      * @param Registry $registry
      * @param ScopeConfigInterface $config
@@ -34,6 +42,8 @@ class FeedStorageDir extends Value
      */
     public function __construct(
         private readonly StorageDirectory $storageDirectory,
+        private readonly RemoteStorageConfig $remoteStorageConfig,
+        private readonly RemoteStoragePath $remoteStoragePath,
         Context $context,
         Registry $registry,
         ScopeConfigInterface $config,
@@ -53,7 +63,11 @@ class FeedStorageDir extends Value
      */
     public function beforeSave(): self
     {
-        $this->storageDirectory->validate((string) $this->getValue());
+        if ($this->remoteStorageConfig->isEnabled()) {
+            $this->remoteStoragePath->validate((string) $this->getValue());
+        } else {
+            $this->storageDirectory->validate((string) $this->getValue());
+        }
 
         return parent::beforeSave();
     }

@@ -10,6 +10,7 @@ use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Model\Feed\LocalFeedFiles;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -354,7 +355,11 @@ class StorageLinkSafetyTest extends TestCase
             $directory ?? ($configured ? $this->root(true) : '')
         );
 
-        return Bootstrap::getObjectManager()->create(FeedStorage::class, ['aeoConfig' => $config]);
+        $objectManager = Bootstrap::getObjectManager();
+
+        return $objectManager->create(FeedStorage::class, [
+            'localFeedFiles' => $objectManager->create(LocalFeedFiles::class, ['aeoConfig' => $config]),
+        ]);
     }
 
     /**

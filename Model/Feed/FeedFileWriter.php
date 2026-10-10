@@ -18,7 +18,7 @@ use Magento\Framework\Exception\FileSystemException;
  * the store directory is checked again before the rename and before a discard: both go through its
  * path, and a link put in its place would take them outside storage (issue #2).
  */
-class FeedFileWriter
+class FeedFileWriter implements FeedWriterInterface
 {
     /**
      * @var resource|null

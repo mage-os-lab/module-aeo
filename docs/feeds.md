@@ -233,6 +233,9 @@ MageOS_Seo streams the XML sitemaps the same way, a page of the catalogue at a t
 
 ## Where the files are stored
 
+With Magento's remote storage on, the feeds are kept in it — see
+[In Magento's remote storage (S3)](#in-magentos-remote-storage-s3). Otherwise they are on disk:
+
 `mageos_aeo/feeds/storage_dir` is empty by default, which means `var/mageos_aeo`.
 Because it is an absolute path set from the admin panel, what it may point at is restricted:
 
@@ -356,6 +359,40 @@ installation rule is applied first, so a root pointing at `pub/`, `app/`, `vendo
 part of the installation is ignored rather than obeyed — an entry copied between environments,
 or left behind by a template, cannot make the web root writable by this module. Declaring a
 directory under `var/` is harmless but pointless: `var/` is allowed anyway.
+
+### In Magento's remote storage (S3)
+
+With Magento's remote storage on (Magento_RemoteStorage, set up with `bin/magento
+setup:config:set --remote-storage-driver=aws-s3 …`), the feeds are kept in it, beside the media:
+the host running the rebuilds writes them there, and every web server serves them from there. No
+shared mount is needed.
+
+- **Where.** The storage directory setting is taken from the remote storage's root, so the one
+  setting says where the feeds are in either case: empty is `mageos_aeo/`, and
+  `/mnt/shared/feeds` is `mnt/shared/feeds/`, each with a `store_<id>/` per store view. While
+  remote storage is on, the value is checked as a path in it when saved — single slashes between
+  its parts, none of them `.` or `..`, letters, digits, `.`, `_` and `-` — rather than as a
+  directory on disk. A value that cannot be a path in remote storage falls back to `mageos_aeo/`,
+  and each rebuild that falls back is shown in the admin as incomplete until it is fixed.
+- **Writing.** A feed is written through Magento's own remote filesystem — the one core's
+  sitemap uses — to a temporary object beside the served one, and moved over it when complete. A
+  reader gets the previous feed or the whole new one, and a rebuild that fails leaves the served
+  feed as it was. llms.jsonl is still built a line at a time: Magento's S3 driver keeps it in a
+  local temporary file and uploads it in one go.
+- **Serving.** Magento's S3 driver reads an object whole into memory, so the feeds are read with
+  a client of their own, configured from the same `remote_storage` settings in `app/etc/env.php`
+  and the same cached credentials, which streams the object: llms.jsonl is served in pieces at any
+  size, as from disk. Remote storage that cannot be read answers `503` with `Retry-After`,
+  logged at most once every 5 minutes. With a remote driver other than S3 — Magento ships none —
+  feeds are read through Magento's driver, whole, and the log says so.
+- **Switching it on.** `bin/magento remote-storage:sync`, the step Magento documents after
+  switching remote storage on, copies the feeds already on disk too, after the media, and lists
+  each: the documents of every store view, from where the setting keeps them on disk to where it
+  puts them in remote storage, unless remote storage already has them. The rebuilds every
+  `setup:upgrade` queues refresh them in any case.
+- **Clean-up** removes only the files feed storage writes, as on disk. The rules that make a
+  directory on disk safe — no links followed, owner-only modes, `var/` or a declared root — have
+  nothing to guard in a bucket, which is deployment configuration.
 
 ---
 

@@ -84,10 +84,31 @@
         </arguments>
     </type>
     <!-- Every storefront request for a feed reads storage; only a rebuild reports to the problem log. -->
-    <type name="MageOS\Aeo\Model\Feed\FeedStorage">
+    <type name="MageOS\Aeo\Model\Feed\LocalFeedFiles">
         <arguments>
             <argument name="problemLog" xsi:type="object">MageOS\Seo\Model\Rebuild\ProblemLog\Proxy</argument>
         </arguments>
+    </type>
+
+    <!--
+        With Magento's remote storage on, the feeds are kept in it. They go through the filesystem
+        core's sitemap is given — fullRemoteFilesystem, every directory remote — while the plain
+        Filesystem is remote for media and import/export only.
+    -->
+    <type name="MageOS\Aeo\Model\Feed\Remote\RemoteFeedFiles">
+        <arguments>
+            <argument name="filesystem" xsi:type="object">fullRemoteFilesystem</argument>
+            <argument name="problemLog" xsi:type="object">MageOS\Seo\Model\Rebuild\ProblemLog\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="MageOS\Aeo\Model\Feed\Remote\DriverFeedReader">
+        <arguments>
+            <argument name="filesystem" xsi:type="object">fullRemoteFilesystem</argument>
+        </arguments>
+    </type>
+    <!-- bin/magento remote-storage:sync copies the feeds already on disk, after the media. -->
+    <type name="Magento\RemoteStorage\Model\Synchronizer">
+        <plugin name="mageos_aeo_copy_feeds" type="MageOS\Aeo\Plugin\RemoteStorage\CopyFeedsOnSynchronize"/>
     </type>
 
 </config>

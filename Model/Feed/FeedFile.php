@@ -9,9 +9,10 @@ namespace MageOS\Aeo\Model\Feed;
 /**
  * A stored feed file, opened for reading.
  *
- * Holds the handle of the very file FeedStorage checked, so whatever happens to the path afterwards
- * — a rebuild renaming a new file over it, a link put in its place — this is the file that is read.
- * The size is the opened file's.
+ * On local disk, holds the handle of the very file FeedStorage checked, so whatever happens to the
+ * path afterwards — a rebuild renaming a new file over it, a link put in its place — this is the
+ * file that is read. From remote storage, holds the object's body as a stream, read as it is sent
+ * (Remote\S3FeedReader). The size is the opened file's.
  */
 class FeedFile
 {
@@ -65,14 +66,27 @@ class FeedFile
      */
     public function output(int $pieceSize): void
     {
+        foreach ($this->pieces($pieceSize) as $piece) {
+            // phpcs:ignore Magento2.Security.LanguageConstruct.DirectOutput -- the response body
+            echo $piece;
+        }
+    }
+
+    /**
+     * The file a piece at a time, then closed — for copying it without holding it in memory.
+     *
+     * @param int $pieceSize Bytes read at a time
+     * @return \Generator<int,string>
+     */
+    public function pieces(int $pieceSize): \Generator
+    {
         try {
             while ($this->handle !== null && !feof($this->handle)) {
                 $piece = fread($this->handle, max(1, $pieceSize));
-                if ($piece === false) {
+                if ($piece === false || $piece === '') {
                     break;
                 }
-                // phpcs:ignore Magento2.Security.LanguageConstruct.DirectOutput -- the response body
-                echo $piece;
+                yield $piece;
             }
         } finally {
             $this->close();

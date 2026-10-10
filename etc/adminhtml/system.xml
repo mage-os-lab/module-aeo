@@ -61,7 +61,9 @@ its meta description. A page not available in this store view is left out.</comm
                     <comment><![CDATA[Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
 llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
 only a directory inside var/ may be used; a shared mount for multi-server deployments must be
-listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.]]></comment>
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>.]]></comment>
                 </field>
             </group>
 

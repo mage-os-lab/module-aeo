@@ -51,10 +51,14 @@ line) at /llms.jsonl. Off by default."
 "Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
 llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
 only a directory inside var/ may be used; a shared mount for multi-server deployments must be
-listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>.","Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
 llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
 only a directory inside var/ may be used; a shared mount for multi-server deployments must be
-listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php."
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>."
 "AI Crawler robots.txt Directives","AI Crawler robots.txt Directives"
 "Append AI Crawler Directives","Append AI Crawler Directives"
 "Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
@@ -88,3 +92,11 @@ its meta description. A page not available in this store view is left out."
 "The file ""%1"" could not be deleted.","The file ""%1"" could not be deleted."
 "The directory ""%1"" could not be deleted.","The directory ""%1"" could not be deleted."
 "The var/ directory could not be resolved.","The var/ directory could not be resolved."
+"Remote storage could not be read: %1","Remote storage could not be read: %1"
+"A feed read from remote storage could not be buffered.","A feed read from remote storage could not be buffered."
+"Could not copy %1 of store view %2 to remote storage: %3","Could not copy %1 of store view %2 to remote storage: %3"
+"Remote storage could not write a feed file: %1","Remote storage could not write a feed file: %1"
+"The configured storage directory cannot be a path in remote storage, so the files are kept in %1 instead.","The configured storage directory cannot be a path in remote storage, so the files are kept in %1 instead."
+"The storage directory ""%1"" has an empty part: separate its parts with single slashes.","The storage directory ""%1"" has an empty part: separate its parts with single slashes."
+"The storage directory ""%1"" is a path in remote storage: use letters, digits, ""."", ""_"" and ""-"", starting each part with a letter or digit.","The storage directory ""%1"" is a path in remote storage: use letters, digits, ""."", ""_"" and ""-"", starting each part with a letter or digit."
+"Remote storage names no bucket or region, so the feeds cannot be read from it.","Remote storage names no bucket or region, so the feeds cannot be read from it."

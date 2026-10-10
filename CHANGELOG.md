@@ -12,6 +12,27 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+### Added
+
+- **The feeds are kept in Magento's remote storage while it is on.** They stayed on the local disk
+  of the host running the rebuilds, so on an S3 installation with several web servers and no shared
+  mount, the others had none to serve. See `docs/feeds.md`, "In Magento's remote storage (S3)".
+  - The storage directory setting is taken from the remote storage's root: empty is
+    `mageos_aeo/`, `/mnt/shared/feeds` is `mnt/shared/feeds/`. While remote storage is on, it is
+    checked as a path in it when saved.
+  - Written through Magento's remote filesystem, to a temporary object moved over the served one.
+  - Served as a stream at any size, with a read client of the module's own configured from
+    `remote_storage` as Magento's S3 driver is, since that driver reads an object whole into memory.
+  - `bin/magento remote-storage:sync` copies the feeds already on disk, after the media.
+- **Requires `magento/module-remote-storage`, `magento/module-aws-s3`, `aws/aws-sdk-php` and
+  `guzzlehttp/psr7`,** part of every Magento and Mage-OS installation.
+- **Classes:** `Model\Feed\FeedStorage` now hands each operation to `Model\Feed\LocalFeedFiles` (the
+  local storage, moved unchanged) or `Model\Feed\Remote\RemoteFeedFiles`, and takes those two;
+  `openForWrite()` returns `Model\Feed\FeedWriterInterface`. New: `Model\Feed\FeedFilesInterface`,
+  `Model\Feed\StorageLog`, `Model\Feed\Remote\*`, `Plugin\RemoteStorage\CopyFeedsOnSynchronize`.
+  `Model\Config\Backend\FeedStorageDir` takes the remote storage configuration and
+  `Remote\RemoteStoragePath`. None is `@api`.
+
 ### Security
 
 - **Feed storage no longer follows symbolic links**

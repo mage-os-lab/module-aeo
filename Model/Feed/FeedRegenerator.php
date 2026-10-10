@@ -33,9 +33,14 @@ class FeedRegenerator
 
     public const GROUPS = [self::GROUP_LLMS, self::GROUP_JSONL];
 
-    private const FILE_LLMS      = 'llms.txt';
-    private const FILE_LLMS_FULL = 'llms-full.txt';
-    private const FILE_JSONL     = 'llms.jsonl';
+    public const FILE_LLMS      = 'llms.txt';
+    public const FILE_LLMS_FULL = 'llms-full.txt';
+    public const FILE_JSONL     = 'llms.jsonl';
+
+    /**
+     * Every document a rebuild writes.
+     */
+    public const FILES = [self::FILE_LLMS, self::FILE_LLMS_FULL, self::FILE_JSONL];
 
     /**
      * @param StoreManagerInterface $storeManager

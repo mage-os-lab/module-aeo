@@ -16,7 +16,9 @@ use MageOS\Aeo\Controller\Llmsjsonl\Index as LlmsJsonl;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Model\Feed\LocalFeedFiles;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
+use MageOS\Aeo\Model\Feed\StorageLog;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
@@ -174,14 +176,18 @@ class StorageAvailabilityTest extends TestCase
      */
     private function storage(string $directory, ?LoggerInterface $logger = null): FeedStorage
     {
-        $config = $this->createStub(Config::class);
+        $objectManager = Bootstrap::getObjectManager();
+        $config        = $this->createStub(Config::class);
         $config->method('getFeedStorageDir')->willReturn($directory);
         $arguments = ['aeoConfig' => $config];
         if ($logger !== null) {
-            $arguments['logger'] = $logger;
+            $arguments['logger']     = $logger;
+            $arguments['storageLog'] = $objectManager->create(StorageLog::class, ['logger' => $logger]);
         }
 
-        return Bootstrap::getObjectManager()->create(FeedStorage::class, $arguments);
+        return $objectManager->create(FeedStorage::class, [
+            'localFeedFiles' => $objectManager->create(LocalFeedFiles::class, $arguments),
+        ]);
     }
 
     /**

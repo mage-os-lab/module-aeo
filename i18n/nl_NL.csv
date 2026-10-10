@@ -48,7 +48,9 @@ line) at /llms.jsonl. Off by default.","Bied op /llms.jsonl een machineleesbare 
 "Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
 llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
 only a directory inside var/ may be used; a shared mount for multi-server deployments must be
-listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl), voor niets anders gebruikt. Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen een map binnen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan."
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl), voor niets anders gebruikt. Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen een map binnen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan. Met de externe opslag van Magento aan worden de feeds daar bewaard, en wordt dit pad vanaf de hoofdmap ervan genomen: leeg is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>."
 "AI Crawler robots.txt Directives","robots.txt-instructies voor AI-crawlers"
 "Append AI Crawler Directives","AI-crawlerinstructies toevoegen"
 "Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
@@ -79,3 +81,11 @@ its meta description. A page not available in this store view is left out.","CMS
 "The file ""%1"" could not be deleted.","Het bestand ""%1"" kon niet worden verwijderd."
 "The directory ""%1"" could not be deleted.","De map ""%1"" kon niet worden verwijderd."
 "The var/ directory could not be resolved.","De map var/ kon niet worden herleid."
+"Remote storage could not be read: %1","De externe opslag kon niet worden gelezen: %1"
+"A feed read from remote storage could not be buffered.","Een uit de externe opslag gelezen feed kon niet worden gebufferd."
+"Could not copy %1 of store view %2 to remote storage: %3","%1 van winkelweergave %2 kon niet naar de externe opslag worden gekopieerd: %3"
+"Remote storage could not write a feed file: %1","De externe opslag kon een feedbestand niet schrijven: %1"
+"The configured storage directory cannot be a path in remote storage, so the files are kept in %1 instead.","De ingestelde opslagmap kan geen pad in de externe opslag zijn, dus worden de bestanden in plaats daarvan in %1 bewaard."
+"The storage directory ""%1"" has an empty part: separate its parts with single slashes.","De opslagmap ""%1"" heeft een leeg deel: scheid de delen met enkele schuine strepen."
+"The storage directory ""%1"" is a path in remote storage: use letters, digits, ""."", ""_"" and ""-"", starting each part with a letter or digit.","De opslagmap ""%1"" is een pad in de externe opslag: gebruik letters, cijfers, ""."", ""_"" en ""-"", en begin elk deel met een letter of cijfer."
+"Remote storage names no bucket or region, so the feeds cannot be read from it.","De externe opslag noemt geen bucket of regio, dus kunnen de feeds er niet uit worden gelezen."

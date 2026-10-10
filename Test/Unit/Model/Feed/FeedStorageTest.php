@@ -13,8 +13,12 @@ use Magento\Framework\Phrase;
 use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Model\Feed\FeedWriterInterface;
 use MageOS\Aeo\Model\Feed\LinkSafeFilesystem;
+use MageOS\Aeo\Model\Feed\LocalFeedFiles;
+use MageOS\Aeo\Model\Feed\Remote\RemoteFeedFiles;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
+use MageOS\Aeo\Model\Feed\StorageLog;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -282,6 +286,41 @@ class FeedStorageTest extends TestCase
     }
 
     /**
+     * With Magento's remote storage on, every operation goes to remote storage, none to local disk.
+     *
+     * @return void
+     */
+    public function testWithRemoteStorageOnEverythingGoesToRemoteStorage(): void
+    {
+        $local = $this->createMock(LocalFeedFiles::class);
+        $methods = [
+            'write', 'openForWrite', 'open', 'read', 'deleteForStore', 'deleteStoreDirectory', 'listStoreDirectories',
+        ];
+        foreach ($methods as $method) {
+            $local->expects($this->never())->method($method);
+        }
+        $writer = $this->createStub(FeedWriterInterface::class);
+        $remote = $this->createMock(RemoteFeedFiles::class);
+        $remote->method('isEnabled')->willReturn(true);
+        $remote->expects($this->once())->method('write')->with('llms.txt', 1, 'feed');
+        $remote->expects($this->once())->method('openForWrite')->with(1)->willReturn($writer);
+        $remote->expects($this->once())->method('open')->with('llms.txt', 1)->willReturn(null);
+        $remote->expects($this->once())->method('read')->with('llms.txt', 1)->willReturn('feed');
+        $remote->expects($this->once())->method('deleteForStore')->with('llms*', 1);
+        $remote->expects($this->once())->method('deleteStoreDirectory')->with(2);
+        $remote->expects($this->once())->method('listStoreDirectories')->willReturn([1]);
+
+        $storage = new FeedStorage($local, $remote);
+        $storage->write('llms.txt', 1, 'feed');
+        $this->assertSame($writer, $storage->openForWrite(1));
+        $this->assertNull($storage->open('llms.txt', 1));
+        $this->assertSame('feed', $storage->read('llms.txt', 1));
+        $storage->deleteForStore('llms*', 1);
+        $storage->deleteStoreDirectory(2);
+        $this->assertSame([1], $storage->listStoreDirectories());
+    }
+
+    /**
      * Storage over the test's var/, with a configured directory if given.
      *
      * @param string $configured
@@ -313,15 +352,21 @@ class FeedStorageTest extends TestCase
             $storageDirectory->method('locate')->willReturn($permitted && $configured !== '' ? $configured : null);
         }
 
-        return new FeedStorage(
+        $logger ??= $this->createStub(LoggerInterface::class);
+        $local    = new LocalFeedFiles(
             $directoryList,
             new FileDriver(),
             new LinkSafeFilesystem(),
             $config,
             $storageDirectory,
-            $logger ?? $this->createStub(LoggerInterface::class),
+            $logger,
             $problemLog ?? $this->createStub(ProblemLog::class),
-            $cache ?? $this->createStub(CacheInterface::class)
+            new StorageLog($logger, $cache ?? $this->createStub(CacheInterface::class))
         );
+        // Remote storage off: the local files.
+        $remote = $this->createStub(RemoteFeedFiles::class);
+        $remote->method('isEnabled')->willReturn(false);
+
+        return new FeedStorage($local, $remote);
     }
 }

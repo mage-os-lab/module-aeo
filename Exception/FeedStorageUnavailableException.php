@@ -9,7 +9,7 @@ use Magento\Framework\Exception\LocalizedException;
 /**
  * Raised when the configured feed storage directory is allowed but cannot be used on this host:
  * missing (a mount that is not there), not a directory, or not readable or writable for what is
- * asked of it.
+ * asked of it — or, with Magento's remote storage on, when the remote storage cannot be read.
  *
  * Deliberately not the same as a feed file that does not exist yet (issue #7). A missing file is
  * fixed by a rebuild, so a request for it queues one; this is fixed by whoever runs the server, so

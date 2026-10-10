@@ -6,14 +6,18 @@
     "minimum-stability": "stable",
     "require": {
         "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
+        "aws/aws-sdk-php": "^3.0",
+        "guzzlehttp/psr7": "^2.0",
         "mage-os/module-seo": "^1.2.2",
         "magento/framework": "^103.0.7",
+        "magento/module-aws-s3": "*",
         "magento/module-backend": "*",
         "magento/module-cache-invalidate": "*",
         "magento/module-catalog": "*",
         "magento/module-cms": "*",
         "magento/module-config": "*",
         "magento/module-page-cache": "*",
+        "magento/module-remote-storage": "*",
         "magento/module-robots": "*",
         "magento/module-sitemap": "*",
         "magento/module-store": "*"
