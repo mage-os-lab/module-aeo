@@ -15,7 +15,7 @@ use MageOS\Aeo\Model\Feed\FeedFile;
 use MageOS\Aeo\Model\Feed\FeedFilesInterface;
 use MageOS\Aeo\Model\Feed\FeedWriterInterface;
 use MageOS\Aeo\Model\Feed\StorageLog;
-use MageOS\Seo\Model\Rebuild\ProblemLog;
+use MageOS\Seo\Api\Rebuild\ProblemLogInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -48,7 +48,7 @@ class RemoteFeedFiles implements FeedFilesInterface
      * @param DriverFeedReader $driverFeedReader
      * @param StorageLog $storageLog
      * @param LoggerInterface $logger
-     * @param ProblemLog $problemLog Injected as a proxy: storefront reads never need it
+     * @param ProblemLogInterface $problemLog Injected as a proxy: storefront reads never need it
      */
     public function __construct(
         private readonly Filesystem          $filesystem,
@@ -59,7 +59,7 @@ class RemoteFeedFiles implements FeedFilesInterface
         private readonly DriverFeedReader    $driverFeedReader,
         private readonly StorageLog          $storageLog,
         private readonly LoggerInterface     $logger,
-        private readonly ProblemLog          $problemLog
+        private readonly ProblemLogInterface $problemLog
     ) {
     }
 

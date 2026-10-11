@@ -135,6 +135,12 @@ order. A category left out of the menu is left out with its subcategories. Unlik
 level is listed: **Maximal Depth** (Catalog → Catalog → Category Top Navigation) limits the menu's
 dropdowns, and every level below it is still a page.
 
+Each link is the URL the category's page answers at: its URL rewrite's request path, or, for a
+category with no rewrite, its `catalog/category/view/id/<ID>` URL.
+
+While **Leave Out NOINDEX Pages** is on (see [below](#noindex-pages)), a NOINDEX category is left
+out, and its subcategories that are not NOINDEX move up under its nearest listed ancestor.
+
 A count is the number of products the category's page lists: enabled, in the store view's website
 and visible in *Catalog* or *Catalog, Search*. An anchor category's count includes its
 subcategories' products, as its page does. A category that lists nothing has no count. The counts
@@ -172,7 +178,7 @@ catalogue, with the host changed to example.com:
 | `@type` | always | `Product` |
 | `@id`, `url` | always | the product URL |
 | `name` | always | the store view's product name |
-| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url`; `price` and `priceCurrency` only when the price is known |
+| `offers` | always | one `Offer` with `price`, `priceCurrency`, `availability` and `url`; for a composite product whose variants are priced differently, an `AggregateOffer` with `lowPrice` and `highPrice` instead of `price`. Prices and `priceCurrency` only when known, `availability` only when the stock could be read |
 | `sku` | when the product has one | |
 | `description` | when the product has one | the short description, else the description: plain text on one line, at most 300 characters, cut at a word and ended with "…" |
 | `image` | when the product has a base image | its absolute URL under the store's media URL |
@@ -187,26 +193,30 @@ The values:
   price is not known when it is 0 — a composite product nothing can price, or a price hidden from
   the visitor — unless MageOS_Seo's **Publish a Price of Zero** is on, which offers a simple product
   priced 0 as free; when it is below 0; or when the lookup throws, which is logged with the SKU.
-  MageOS_Seo's `Model\Product\FinalPrice` decides this here and in the product pages' structured
-  data alike.
+  MageOS_Seo's `FinalPriceInterface` decides this here and in the product pages' structured data
+  alike.
+- **A composite product's offer is its page's.** MageOS_Seo's offer summary
+  (`Api\Product\OfferSummaryInterface`) gives the numbers the product page's offer is built from:
+  a configurable whose variants are priced differently has an `AggregateOffer` from the lowest to
+  the highest variant price, and the availability of its best variant.
 - `availability` is `https://schema.org/InStock`, `https://schema.org/BackOrder` or
   `https://schema.org/OutOfStock`, by the website's stock as the storefront reads it: MSI's stock
-  index, read for 1,000 products at a time by MageOS_Seo's `Model\Product\AvailabilityResolver`.
+  index, read for 1,000 products at a time through MageOS_Seo's `AvailabilityResolverInterface`.
   The rules are those of the product pages' structured data (MageOS_Seo's
   [structured-data.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/structured-data.md#an-offers-availability)):
-  BackOrder for a product that sells only through backorders. Two differences from a product page:
-  - a configurable product's line says InStock when it is salable at all, as its children aren't
-    loaded here;
-  - like the storefront, the index does not subtract reservations, orders placed but not yet
-    shipped: a product whose last units are all reserved stays InStock until shipping deducts them.
+  BackOrder for a product that sells only through backorders. Like the storefront, the index does
+  not subtract reservations, orders placed but not yet shipped: a product whose last units are all
+  reserved stays InStock until shipping deducts them.
 
-  When the lookup fails, the products it covered are written as OutOfStock and the failure is
-  logged, and the admin is shown the store view's llms.jsonl as incomplete until a rebuild gets
-  through.
+  **When the lookup fails, availability is left out** of the lines it covered, rather than guessed
+  as OutOfStock. The failure is logged, and the admin is shown the store view's llms.jsonl as
+  incomplete until a rebuild gets through.
 
 A product gets a line when it is enabled, assigned to the store view's website, visible in
 *Catalog* or *Catalog, Search*, and in Magento's price index, which the feed reads its products
-with. Products visible in *Search* only, and those not visible individually, are left out.
+with, and, while **Leave Out NOINDEX Pages** is on, when its page is not NOINDEX
+([below](#noindex-pages)). Products visible in *Search* only, and those not visible individually,
+are left out.
 **Out-of-stock products have no line.** With **Display Out of Stock Products** at No, Magento's
 default, that is because Magento leaves them out of the price index. A line
 that cannot be encoded as JSON (invalid UTF-8 in a name, for example) is left out and logged as a
@@ -256,7 +266,35 @@ for that path never applies. To serve your own file at one of these paths, disab
 that file for the store view, and the path falls through to rewrites and CMS pages.
 
 Don't add URL rewrites for these paths: none is needed. The internal controller URLs
-(`/mageos-aeo/...`) 301-redirect to the canonical paths.
+(`/mageos-aeo/...`), a query string and a trailing slash (`/llms.txt/`) 301-redirect to the
+canonical paths, so none is a second copy with its own cache entry.
+
+---
+
+## NOINDEX pages
+
+**Stores → Configuration → MageOS SEO → AI Information & Crawlers → AI Discoverability (llms.txt)
+→ Leave Out NOINDEX Pages** (default Yes, per store view).
+
+A page a merchant keeps out of search engines with NOINDEX is kept out of the llms documents too:
+
+- **products** leave /llms.jsonl;
+- **categories** leave the category lists and trees of /llms.txt and /llms-full.txt. A NOINDEX
+  category's subcategories that are not NOINDEX themselves move up under its nearest listed
+  ancestor, rather than going with it.
+
+The directive is the one the page itself gets, read through MageOS_Seo's
+`Api\Robots\PageDirectivesInterface`, as the XML sitemap reads it: MageOS_Seo's setting for the
+product or category, a category's inherited from its nearest ancestor that has one, then the
+Product Pages or Category Pages default, else core's **Design → Search Engine Robots**. A staging
+store set to NOINDEX there therefore lists no products or categories.
+
+Pages chosen under **Pages Listed in llms.txt** are listed whatever their directive: choosing one
+is a decision to list it.
+
+Changing a product's or category's robots setting, or one of the defaults, queues the documents
+that list it (see [feeds.md](feeds.md#when-a-rebuild-is-queued)). Set the setting to No to list
+every page regardless of its directive.
 
 ---
 

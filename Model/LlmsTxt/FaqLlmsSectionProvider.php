@@ -7,7 +7,7 @@ namespace MageOS\Aeo\Model\LlmsTxt;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
 use MageOS\Aeo\Model\Config;
-use MageOS\Seo\Model\Faq\SourcePool;
+use MageOS\Seo\Api\FaqSourcePoolInterface;
 
 /**
  * Injects the configured FAQ groups into /llms.txt and /llms-full.txt as a markdown Q&A list.
@@ -27,14 +27,14 @@ class FaqLlmsSectionProvider implements LlmsTxtSectionProviderInterface
     private const CONCISE_LIMIT = 5;
 
     /**
-     * @param SourcePool $sourcePool
+     * @param FaqSourcePoolInterface $sourcePool
      * @param StoreManagerInterface $storeManager
      * @param Config $aeoConfig
      */
     public function __construct(
-        private readonly SourcePool            $sourcePool,
-        private readonly StoreManagerInterface $storeManager,
-        private readonly Config                $aeoConfig
+        private readonly FaqSourcePoolInterface $sourcePool,
+        private readonly StoreManagerInterface  $storeManager,
+        private readonly Config                 $aeoConfig
     ) {
     }
 

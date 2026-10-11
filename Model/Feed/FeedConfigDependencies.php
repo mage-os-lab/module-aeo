@@ -40,6 +40,14 @@ class FeedConfigDependencies
     ];
 
     /**
+     * MageOS_Seo's robots defaults for product and category pages, and core's for every page. Paths,
+     * not MageOS_Seo's constants: only its Api is used here.
+     */
+    private const ROBOTS_PRODUCT_DEFAULT  = 'mageos_seo_general/robots_meta/product_default';
+    private const ROBOTS_CATEGORY_DEFAULT = 'mageos_seo_general/robots_meta/category_default';
+    private const ROBOTS_CORE_DEFAULT     = 'design/search_engine_robots/default_robots';
+
+    /**
      * The configuration each group's documents show, by path or path prefix.
      *
      * llms.txt and llms-full.txt:
@@ -49,13 +57,17 @@ class FeedConfigDependencies
      *  - the FAQ groups and the CMS pages listed;
      *  - web/: the base URL every link starts with;
      *  - catalog/seo/: the category URL suffix in the category tree;
-     *  - mageos_seo_merchant/return/: the returns policy page in the Policies section.
+     *  - mageos_seo_merchant/return/: the returns policy page in the Policies section;
+     *  - Leave Out NOINDEX Pages, and the robots defaults that decide which categories are NOINDEX:
+     *    MageOS_Seo's Category Pages default and core's (review M4). The CMS default is not one:
+     *    the policy pages are chosen by name and listed whatever their directive.
      *
      * llms.jsonl:
      *  - currency/: the currency prices are shown in;
      *  - catalog/price/scope: whether prices are global or per website;
      *  - web/ and catalog/seo/: product, image and media URLs;
-     *  - cataloginventory/options/show_out_of_stock: which products the price index lists.
+     *  - cataloginventory/options/show_out_of_stock: which products the price index lists;
+     *  - Leave Out NOINDEX Pages, MageOS_Seo's Product Pages default and core's robots default.
      *
      * Currency rates are not configuration, so a rate import shows in llms.jsonl from the nightly
      * rebuild.
@@ -66,16 +78,22 @@ class FeedConfigDependencies
             'trans_email/ident_support/',
             Config::XML_LLMS_FAQ_GROUPS,
             Config::XML_LLMS_POLICY_PAGES,
+            Config::XML_LLMS_EXCLUDE_NOINDEX,
             'web/',
             'catalog/seo/',
             'mageos_seo_merchant/return/',
+            self::ROBOTS_CATEGORY_DEFAULT,
+            self::ROBOTS_CORE_DEFAULT,
         ],
         FeedRegenerator::GROUP_JSONL => [
             'currency/',
             'catalog/price/scope',
+            Config::XML_LLMS_EXCLUDE_NOINDEX,
             'web/',
             'catalog/seo/',
             'cataloginventory/options/show_out_of_stock',
+            self::ROBOTS_PRODUCT_DEFAULT,
+            self::ROBOTS_CORE_DEFAULT,
         ],
     ];
 

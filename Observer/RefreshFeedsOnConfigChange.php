@@ -11,7 +11,7 @@ use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use MageOS\Aeo\Model\Feed\DocumentRetirement;
 use MageOS\Aeo\Model\Feed\FeedConfigDependencies;
-use MageOS\Seo\Model\Rebuild\Invalidator;
+use MageOS\Seo\Api\Rebuild\InvalidatorInterface;
 
 /**
  * Brings the feeds in line with a saved or deleted configuration value, once it is committed (issue #4).
@@ -37,13 +37,13 @@ class RefreshFeedsOnConfigChange implements ObserverInterface
     /**
      * @param FeedConfigDependencies $dependencies
      * @param DocumentRetirement $documentRetirement
-     * @param Invalidator $invalidator
+     * @param InvalidatorInterface $invalidator
      * @param ConfigDataResource $configDataResource
      */
     public function __construct(
         private readonly FeedConfigDependencies $dependencies,
         private readonly DocumentRetirement     $documentRetirement,
-        private readonly Invalidator            $invalidator,
+        private readonly InvalidatorInterface   $invalidator,
         private readonly ConfigDataResource     $configDataResource
     ) {
     }

@@ -69,7 +69,7 @@ Crawlers not selected keep following your standard ""User-agent: *"" rules."
 "llms.txt and llms-full.txt","llms.txt and llms-full.txt"
 "llms.jsonl","llms.jsonl"
 "Feed %1","Feed %1"
-"The stock lookup failed, so some products are listed as out of stock.","The stock lookup failed, so some products are listed as out of stock."
+"The stock lookup failed, so some products are listed without their availability.","The stock lookup failed, so some products are listed without their availability."
 "The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead."
 Categories,Categories
 Policies,Policies
@@ -80,6 +80,8 @@ Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is 
 its meta description. A page not available in this store view is left out.","CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
 Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
 its meta description. A page not available in this store view is left out."
+"Leave Out NOINDEX Pages","Leave Out NOINDEX Pages"
+"Yes: a product or category whose page is NOINDEX, which keeps it out of search engines, is left out of /llms.txt, /llms-full.txt and /llms.jsonl too. A NOINDEX category's subcategories that are not NOINDEX take its place. Pages chosen above under Pages Listed in llms.txt are listed either way. No: the documents list them all.","Yes: a product or category whose page is NOINDEX, which keeps it out of search engines, is left out of /llms.txt, /llms-full.txt and /llms.jsonl too. A NOINDEX category's subcategories that are not NOINDEX take its place. Pages chosen above under Pages Listed in llms.txt are listed either way. No: the documents list them all."
 "The feed storage directory can be written to by every user: %1. Allow only the users that run Magento.","The feed storage directory can be written to by every user: %1. Allow only the users that run Magento."
 "Feed storage does not follow symbolic links, and ""%1"" is one.","Feed storage does not follow symbolic links, and ""%1"" is one."
 "The feed storage directory ""%1"" does not exist.","The feed storage directory ""%1"" does not exist."

@@ -8,7 +8,7 @@ use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\LlmsInvalidationPolicy;
-use MageOS\Seo\Model\Rebuild\Invalidator;
+use MageOS\Seo\Api\Rebuild\InvalidatorInterface;
 
 /**
  * Invalidates only the /llms.jsonl feed when a product changes.
@@ -19,11 +19,11 @@ use MageOS\Seo\Model\Rebuild\Invalidator;
 class InvalidateLlmsJsonlCache implements ObserverInterface
 {
     /**
-     * @param Invalidator $invalidator
+     * @param InvalidatorInterface $invalidator
      * @param LlmsInvalidationPolicy $invalidationPolicy
      */
     public function __construct(
-        private readonly Invalidator            $invalidator,
+        private readonly InvalidatorInterface   $invalidator,
         private readonly LlmsInvalidationPolicy $invalidationPolicy
     ) {
     }

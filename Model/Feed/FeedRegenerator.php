@@ -11,7 +11,7 @@ use MageOS\Aeo\Exception\FeedRebuildInProgressException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
-use MageOS\Seo\Model\Rebuild\ProblemLog;
+use MageOS\Seo\Api\Rebuild\ProblemLogInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -52,7 +52,7 @@ class FeedRegenerator
      * @param FeedCache $feedCache
      * @param LoggerInterface $logger
      * @param RebuildLock $rebuildLock
-     * @param ProblemLog $problemLog
+     * @param ProblemLogInterface $problemLog
      */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
@@ -64,7 +64,7 @@ class FeedRegenerator
         private readonly FeedCache             $feedCache,
         private readonly LoggerInterface       $logger,
         private readonly RebuildLock           $rebuildLock,
-        private readonly ProblemLog            $problemLog
+        private readonly ProblemLogInterface   $problemLog
     ) {
     }
 
@@ -97,7 +97,7 @@ class FeedRegenerator
             $failures = $this->build($groups, $group === null);
         } catch (\Throwable $e) {
             foreach ($groups as $each) {
-                $this->problemLog->rebuilt($each, [ProblemLog::ALL => $e->getMessage()]);
+                $this->problemLog->rebuilt($each, [ProblemLogInterface::ALL => $e->getMessage()]);
             }
             throw $e;
         } finally {

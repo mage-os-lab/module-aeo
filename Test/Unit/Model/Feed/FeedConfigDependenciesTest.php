@@ -72,4 +72,33 @@ class FeedConfigDependenciesTest extends TestCase
             $this->assertSame($groups, $dependencies->groupsShowing($path), $path);
         }
     }
+
+    /**
+     * Review M4, decision D2a: which pages are NOINDEX decides what the feeds leave out, so the
+     * robots defaults are shown values too. Products are in llms.jsonl, categories in the llms
+     * documents; core's default reaches both. The policy pages are chosen by name and listed
+     * whatever their directive, so the CMS default changes nothing; nor does the search results one.
+     *
+     * @return void
+     */
+    public function testTheRobotsDefaultsAreShownValuesOfTheFeedsTheirPagesAreIn(): void
+    {
+        $dependencies = new FeedConfigDependencies();
+        $llms         = [FeedRegenerator::GROUP_LLMS];
+        $jsonl        = [FeedRegenerator::GROUP_JSONL];
+        $both         = [FeedRegenerator::GROUP_LLMS, FeedRegenerator::GROUP_JSONL];
+
+        $expected = [
+            'mageos_seo_general/robots_meta/product_default'  => $jsonl,
+            'mageos_seo_general/robots_meta/category_default' => $llms,
+            'design/search_engine_robots/default_robots'      => $both,
+            'mageos_aeo/llms_txt/exclude_noindex'             => $both,
+            'mageos_seo_general/robots_meta/cms_page_default' => [],
+            'mageos_seo_general/robots_meta/search_default'   => [],
+        ];
+
+        foreach ($expected as $path => $groups) {
+            $this->assertSame($groups, $dependencies->groupsShowing($path), $path);
+        }
+    }
 }

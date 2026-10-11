@@ -60,7 +60,7 @@ Crawlers not selected keep following your standard ""User-agent: *"" rules.","Vo
 "llms.txt and llms-full.txt","llms.txt en llms-full.txt"
 "llms.jsonl","llms.jsonl"
 "Feed %1","Feed %1"
-"The stock lookup failed, so some products are listed as out of stock.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld als niet op voorraad."
+"The stock lookup failed, so some products are listed without their availability.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld zonder hun beschikbaarheid."
 "The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","De ingestelde opslagmap is niet toegestaan, dus de bestanden staan in plaats daarvan in var/mageos_aeo."
 Categories,Categorieën
 Policies,Beleid
@@ -69,6 +69,8 @@ Policies,Beleid
 "CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
 Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
 its meta description. A page not available in this store view is left out.","CMS-pagina's die onder Beleid in /llms.txt en /llms-full.txt staan, na de URL retourbeleid (SEO-verkoopbeleid): privacy, voorwaarden, verzending, over ons. Elke pagina staat er met haar titel en metabeschrijving. Een pagina die niet beschikbaar is in deze winkelweergave, wordt weggelaten."
+"Leave Out NOINDEX Pages","NOINDEX-pagina's weglaten"
+"Yes: a product or category whose page is NOINDEX, which keeps it out of search engines, is left out of /llms.txt, /llms-full.txt and /llms.jsonl too. A NOINDEX category's subcategories that are not NOINDEX take its place. Pages chosen above under Pages Listed in llms.txt are listed either way. No: the documents list them all.","Ja: een product of categorie waarvan de pagina NOINDEX is, en daardoor buiten zoekmachines blijft, wordt ook weggelaten uit /llms.txt, /llms-full.txt en /llms.jsonl. Subcategorieën van een NOINDEX-categorie die zelf niet NOINDEX zijn, nemen haar plaats in. Pagina's die hierboven bij Pagina's in llms.txt zijn gekozen, staan er hoe dan ook in. Nee: de documenten vermelden ze allemaal."
 "The feed storage directory can be written to by every user: %1. Allow only the users that run Magento.","Elke gebruiker kan schrijven in de opslagmap voor feeds: %1. Sta alleen de gebruikers toe waaronder Magento draait."
 "Feed storage does not follow symbolic links, and ""%1"" is one.","De feedopslag volgt geen symbolische koppelingen, en ""%1"" is er een."
 "The feed storage directory ""%1"" does not exist.","De opslagmap voor feeds ""%1"" bestaat niet."

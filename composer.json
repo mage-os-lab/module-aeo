@@ -8,7 +8,7 @@
         "php": "~8.3.0 || ~8.4.0 || ~8.5.0",
         "aws/aws-sdk-php": "^3.0",
         "guzzlehttp/psr7": "^2.0",
-        "mage-os/module-seo": "^1.2.2",
+        "mage-os/module-seo": "^2.0",
         "magento/framework": "^103.0.7",
         "magento/module-aws-s3": "*",
         "magento/module-backend": "*",

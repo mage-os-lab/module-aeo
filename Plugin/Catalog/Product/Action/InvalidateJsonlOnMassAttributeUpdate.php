@@ -7,7 +7,7 @@ namespace MageOS\Aeo\Plugin\Catalog\Product\Action;
 use Magento\Catalog\Model\Product\Action;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\LlmsInvalidationPolicy;
-use MageOS\Seo\Model\Rebuild\Invalidator;
+use MageOS\Seo\Api\Rebuild\InvalidatorInterface;
 
 /**
  * Queues a rebuild of /llms.jsonl after a mass attribute update.
@@ -24,11 +24,11 @@ use MageOS\Seo\Model\Rebuild\Invalidator;
 class InvalidateJsonlOnMassAttributeUpdate
 {
     /**
-     * @param Invalidator $invalidator
+     * @param InvalidatorInterface $invalidator
      * @param LlmsInvalidationPolicy $invalidationPolicy
      */
     public function __construct(
-        private readonly Invalidator            $invalidator,
+        private readonly InvalidatorInterface   $invalidator,
         private readonly LlmsInvalidationPolicy $invalidationPolicy
     ) {
     }

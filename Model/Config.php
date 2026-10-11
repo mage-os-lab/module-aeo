@@ -21,6 +21,7 @@ class Config
     public const XML_LLMS_JSONL_ENABLED   = 'mageos_aeo/llms_txt/jsonl_enabled';
     public const XML_LLMS_FAQ_GROUPS      = 'mageos_aeo/llms_txt/faq_groups';
     public const XML_LLMS_POLICY_PAGES    = 'mageos_aeo/llms_txt/policy_pages';
+    public const XML_LLMS_EXCLUDE_NOINDEX = 'mageos_aeo/llms_txt/exclude_noindex';
     public const XML_FEEDS_STORAGE_DIR    = 'mageos_aeo/feeds/storage_dir';
     public const XML_AI_ROBOTS_ENABLED    = 'mageos_aeo/ai_robots/enabled';
     public const XML_AI_ROBOTS_DISALLOWED = 'mageos_aeo/ai_robots/disallowed';
@@ -73,6 +74,21 @@ class Config
     {
         return (bool) $this->scopeConfig->getValue(
             self::XML_LLMS_JSONL_ENABLED,
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+    }
+
+    /**
+     * Whether products and categories whose pages are NOINDEX are left out of the llms documents.
+     *
+     * @param int|string|null $storeId
+     * @return bool
+     */
+    public function isNoindexExcluded(int|string|null $storeId = null): bool
+    {
+        return (bool) $this->scopeConfig->getValue(
+            self::XML_LLMS_EXCLUDE_NOINDEX,
             ScopeInterface::SCOPE_STORE,
             $storeId
         );

@@ -7,7 +7,7 @@ namespace MageOS\Aeo\Model\Feed;
 use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
-use MageOS\Seo\Model\Rebuild\RegenerationRequester;
+use MageOS\Seo\Api\Rebuild\RegenerationRequesterInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -31,16 +31,16 @@ class DocumentRetirement
     /**
      * @param FeedStorage $feedStorage
      * @param FeedCache $feedCache
-     * @param RegenerationRequester $regenerationRequester
+     * @param RegenerationRequesterInterface $regenerationRequester
      * @param StoreManagerInterface $storeManager
      * @param LoggerInterface $logger
      */
     public function __construct(
-        private readonly FeedStorage           $feedStorage,
-        private readonly FeedCache             $feedCache,
-        private readonly RegenerationRequester $regenerationRequester,
-        private readonly StoreManagerInterface $storeManager,
-        private readonly LoggerInterface       $logger
+        private readonly FeedStorage                    $feedStorage,
+        private readonly FeedCache                      $feedCache,
+        private readonly RegenerationRequesterInterface $regenerationRequester,
+        private readonly StoreManagerInterface          $storeManager,
+        private readonly LoggerInterface                $logger
     ) {
     }
 

@@ -15,8 +15,8 @@ use MageOS\Aeo\Model\Feed\FeedCache;
 use MageOS\Aeo\Model\Feed\FeedDelivery;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
-use MageOS\Seo\Model\Rebuild\RegenerationRequester;
-use MageOS\Seo\Model\Router\CanonicalPathRedirect;
+use MageOS\Seo\Api\Rebuild\RegenerationRequesterInterface;
+use MageOS\Seo\Api\Router\CanonicalPathRedirectInterface;
 
 class Index implements HttpGetActionInterface
 {
@@ -26,19 +26,19 @@ class Index implements HttpGetActionInterface
      * @param RawFactory $rawFactory
      * @param Config $aeoConfig
      * @param FeedStorage $feedStorage
-     * @param CanonicalPathRedirect $canonicalPathRedirect
-     * @param RegenerationRequester $regenerationRequester
+     * @param CanonicalPathRedirectInterface $canonicalPathRedirect
+     * @param RegenerationRequesterInterface $regenerationRequester
      * @param StoreManagerInterface $storeManager
      * @param FeedDelivery $feedDelivery
      */
     public function __construct(
-        private readonly RawFactory            $rawFactory,
-        private readonly Config                $aeoConfig,
-        private readonly FeedStorage           $feedStorage,
-        private readonly CanonicalPathRedirect $canonicalPathRedirect,
-        private readonly RegenerationRequester $regenerationRequester,
-        private readonly StoreManagerInterface $storeManager,
-        private readonly FeedDelivery          $feedDelivery,
+        private readonly RawFactory                     $rawFactory,
+        private readonly Config                         $aeoConfig,
+        private readonly FeedStorage                    $feedStorage,
+        private readonly CanonicalPathRedirectInterface $canonicalPathRedirect,
+        private readonly RegenerationRequesterInterface $regenerationRequester,
+        private readonly StoreManagerInterface          $storeManager,
+        private readonly FeedDelivery                   $feedDelivery,
     ) {
     }
 

@@ -10,7 +10,7 @@ use Magento\Framework\Filesystem\Driver\File as FileDriver;
 use Magento\Framework\Phrase;
 use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
-use MageOS\Seo\Model\Rebuild\ProblemLog;
+use MageOS\Seo\Api\Rebuild\ProblemLogInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -57,18 +57,18 @@ class LocalFeedFiles implements FeedFilesInterface
      * @param Config $aeoConfig
      * @param StorageDirectory $storageDirectory
      * @param LoggerInterface $logger
-     * @param ProblemLog $problemLog Injected as a proxy: storefront reads never need it
+     * @param ProblemLogInterface $problemLog Injected as a proxy: storefront reads never need it
      * @param StorageLog $storageLog
      */
     public function __construct(
-        private readonly DirectoryList      $directoryList,
-        private readonly FileDriver         $fileDriver,
-        private readonly LinkSafeFilesystem $linkSafeFilesystem,
-        private readonly Config             $aeoConfig,
-        private readonly StorageDirectory   $storageDirectory,
-        private readonly LoggerInterface    $logger,
-        private readonly ProblemLog         $problemLog,
-        private readonly StorageLog         $storageLog
+        private readonly DirectoryList       $directoryList,
+        private readonly FileDriver          $fileDriver,
+        private readonly LinkSafeFilesystem  $linkSafeFilesystem,
+        private readonly Config              $aeoConfig,
+        private readonly StorageDirectory    $storageDirectory,
+        private readonly LoggerInterface     $logger,
+        private readonly ProblemLogInterface $problemLog,
+        private readonly StorageLog          $storageLog
     ) {
     }
 

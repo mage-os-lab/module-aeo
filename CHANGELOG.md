@@ -14,6 +14,19 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ### Added
 
+- **Leave Out NOINDEX Pages** (AI Discoverability, default Yes, per store view; review M4,
+  decisions D2a and D3a). A product or category whose page is NOINDEX, which keeps it out of
+  search engines, was listed in the llms documents all the same. It is now left out of /llms.txt,
+  /llms-full.txt and /llms.jsonl.
+  - The directive is the one the page gets: MageOS_Seo's setting for it, inherited along a
+    category's path, else core's Design → Search Engine Robots
+    (`MageOS\Seo\Api\Robots\PageDirectivesInterface`, which the XML sitemap reads too).
+  - A NOINDEX category's subcategories that are not NOINDEX move up under its nearest listed
+    ancestor, rather than going with it.
+  - Pages chosen under **Pages Listed in llms.txt** are listed either way.
+  - Changing a product's or category's robots setting, the Product Pages or Category Pages
+    default, or core's Default Robots, queues the documents that list it.
+  - Set it to No to list every page, as before.
 - **The feeds are kept in Magento's remote storage while it is on.** They stayed on the local disk
   of the host running the rebuilds, so on an S3 installation with several web servers and no shared
   mount, the others had none to serve. See `docs/feeds.md`, "In Magento's remote storage (S3)".
@@ -111,12 +124,43 @@ before 2026-10-02. Its history up to then is kept in that repository.
   ([MageOS_Seo #30](https://github.com/mage-os-lab/module-seo/issues/30)). Availability comes from
   MageOS_Seo's `AvailabilityResolver`, a page of 1,000 products at a time, by the same rules as the
   product pages: InStock, BackOrder for a product that sells only through backorders, or
-  OutOfStock. A configurable's line says InStock when it is salable at all, as its children aren't
-  loaded here.
+  OutOfStock. A configurable's line takes its best variant's, as its page does (below).
+- **llms.jsonl reads a page's variants at once.** `JsonlBuilder` hands each page of products to
+  `ProductLineBuilder::prefetch()` (MageOS_Seo's `OfferSummaryInterface::prefetch()`), so a
+  configurable's offer costs no query of its own: Luma's sample catalogue builds in 821 queries,
+  where reading each configurable's variants took 2,440.
+- **A configurable without an image of its own lends its first sold variant's** (MageOS_Seo's
+  `VariantImageInterface`). The line read `getImage()`, whose fallback loaded all of the
+  configurable's variants for it. `ProductLineBuilder` takes `VariantImageInterface`.
+- **A configurable's line has the offer its page has** (review M4). It was one Offer, at the
+  configurable's own price and with its own stock row's availability, while its page had an
+  AggregateOffer from its lowest to its highest variant price and its best variant's availability.
+  A composite product's offer now comes from MageOS_Seo's offer summary
+  (`Api\Product\OfferSummaryInterface`), the numbers the page's offer is built from: an
+  AggregateOffer with `lowPrice` and `highPrice` when its variants are priced differently. The
+  build reads each configurable's variants to do so.
+- **A stock lookup that fails leaves availability out** (decision D8a). The lines of the page whose
+  lookup failed said OutOfStock. They now have no availability, and the rebuild is still reported
+  in the admin, with the message "The stock lookup failed, so some products are listed without
+  their availability."
+- **Changing the AI crawler settings purges every store view's robots.txt** (review M5). Core
+  caches robots.txt in the page cache under `robots_<store ID>`, and nothing purged it when
+  **AI Crawler robots.txt Directives** changed, so the old directives were served until the whole
+  page cache was flushed. Changing a setting under `mageos_aeo/ai_robots/`, or returning it to its
+  default, now purges every store view's, once committed (`Observer\PurgeRobotsTxtOnConfigChange`).
+- **A category's link in /llms-full.txt is the URL its page answers at.** It was the category's
+  `url_path` with the category suffix, which 404s once no URL rewrite matches it. It is now the
+  rewrite's request path, and for a category with no rewrite its `catalog/category/view/id/<ID>`
+  URL.
+- **`/llms.txt/`, `/llms-full.txt/` and `/llms.jsonl/`, with a trailing slash, 301 to the
+  document.** They served a second copy, with a cache entry of its own (MageOS_Seo's
+  `CanonicalPathRedirect`).
 
 ### Changed
 
-- Requires MageOS_Seo `^1.2.2`, which now carries the batched `AvailabilityResolver`.
+- Requires MageOS_Seo `^2.0` (was `^1.2.1`). Seo's next release is 2.0.0: it carries the batched
+  `AvailabilityResolver` this module now reads, and changes the classes this module uses into
+  `Api` interfaces.
 - **`Model\ResourceModel\StockIndexSalability` is removed**; MageOS_Seo's `AvailabilityResolver`
   reads the same stock index. `Model\LlmsJsonl\ProductLineBuilder::build()` takes the schema.org
   availability URI where it took a bool, and `JsonlBuilder` no longer takes the resource model.
@@ -134,6 +178,33 @@ before 2026-10-02. Its history up to then is kept in that repository.
   `ResultInterface|ResponseInterface`.
 - `Model\Feed\LlmsInvalidationPolicy` no longer decides configuration changes;
   `Model\Feed\FeedConfigDependencies` lists what each feed depends on.
+- **The configuration's permission is under Stores → Settings → Configuration**, with every other
+  configuration section's, MageOS_Seo's included (decision D11a). It was under a top-level SEO
+  node. The resource ID, `MageOS_Aeo::config`, is unchanged, so roles keep their grants.
+- **MageOS_Seo through its `Api` interfaces only** (decision D7b). Every class here that used one
+  of MageOS_Seo's classes takes its interface instead; only `Exception\RebuildInProgressException`
+  and `Model\ResourceModel\AbstractConnectedResource` are still extended. A subclass that overrides
+  one of these constructors follows:
+  - the three feed controllers (`RegenerationRequesterInterface`,
+    `CanonicalPathRedirectInterface`); `Model\Feed\DocumentRetirement` and
+    `Setup\Patch\Data\RemoveHreflangSitemap` (`RegenerationRequesterInterface`);
+  - `Model\Feed\FeedRegenerator`, `Model\Feed\LocalFeedFiles` and
+    `Model\Feed\Remote\RemoteFeedFiles` (`ProblemLogInterface`, whose `ALL` replaces
+    `ProblemLog::ALL`);
+  - `Model\Feed\LlmsInvalidationPolicy` (`ChangeInspectorInterface`); the observers
+    `InvalidateLlmsTxtCache`, `InvalidateLlmsJsonlCache` and `RefreshFeedsOnConfigChange`, and
+    `Plugin\InvalidateJsonlOnMassAttributeUpdate` (`InvalidatorInterface`);
+  - `Model\Config\Source\FaqGroups` and `Model\LlmsTxt\FaqLlmsSectionProvider`
+    (`FaqSourcePoolInterface`); `Model\LlmsTxt\PolicyPages` (`StorefrontSettingsInterface`);
+  - `Model\LlmsTxt\LlmsTxtBuilder` takes `SchemaTemplatesInterface`,
+    `StorefrontSettingsInterface`, `ContactEmailInterface`, `PageDirectivesInterface` and this
+    module's `Config`;
+  - `Model\LlmsJsonl\JsonlBuilder` takes this module's `Config` and `PageDirectivesInterface`;
+  - `Model\LlmsJsonl\ProductLineBuilder` takes `StoreManagerInterface`, `SchemaPriceInterface`,
+    `FinalPriceInterface` and `OfferSummaryInterface`, and `build()` takes the availability as
+    `?string`, null for unknown.
+  - The di.xml registrations name `PublicPathsInterface`, `HandlerPoolInterface` and
+    `ProblemLogInterface`.
 
 ## [1.0.0] — 2026-10-05
 

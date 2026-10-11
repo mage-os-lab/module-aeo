@@ -24,4 +24,17 @@ class InternalRoutesTest extends AbstractController
         $this->assertSame(301, $this->getResponse()->getHttpResponseCode());
         $this->assertRedirect($this->stringEndsWith('/llms.txt'));
     }
+
+    /**
+     * Review low item: /llms.txt/ was served as a second, publicly cacheable copy of /llms.txt.
+     *
+     * @return void
+     */
+    public function testATrailingSlashRedirectsToTheCanonicalPath(): void
+    {
+        $this->dispatch('/llms.txt/');
+
+        $this->assertSame(301, $this->getResponse()->getHttpResponseCode(), '/llms.txt/ was not redirected.');
+        $this->assertRedirect($this->stringEndsWith('/llms.txt'));
+    }
 }

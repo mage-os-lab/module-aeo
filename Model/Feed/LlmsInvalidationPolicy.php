@@ -8,7 +8,7 @@ use Magento\Catalog\Model\Product;
 use Magento\Framework\Event;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Model\Config;
-use MageOS\Seo\Model\Rebuild\ChangeInspector;
+use MageOS\Seo\Api\Rebuild\ChangeInspectorInterface;
 
 /**
  * Decides whether a change can affect the llms documents, so saves that cannot change them queue no
@@ -30,12 +30,12 @@ class LlmsInvalidationPolicy
     /**
      * @param StoreManagerInterface $storeManager
      * @param Config $aeoConfig
-     * @param ChangeInspector $changeInspector
+     * @param ChangeInspectorInterface $changeInspector
      */
     public function __construct(
-        private readonly StoreManagerInterface $storeManager,
-        private readonly Config                $aeoConfig,
-        private readonly ChangeInspector       $changeInspector
+        private readonly StoreManagerInterface    $storeManager,
+        private readonly Config                   $aeoConfig,
+        private readonly ChangeInspectorInterface $changeInspector
     ) {
     }
 

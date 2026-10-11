@@ -47,16 +47,17 @@ class OwnerRegistrationsTest extends TestCase
     }
 
     /**
-     * The resource sits under MageOS_Seo's SEO resource, where admin roles already find it.
+     * The resource sits with every other configuration section's (decision D11a; its whole ancestry
+     * is AclTreeTest's).
      *
      * @return void
      */
-    public function testTheAclResourceIsRegisteredUnderSeo(): void
+    public function testTheAclResourceIsRegisteredWithTheConfigurationSections(): void
     {
         $acl = Bootstrap::getObjectManager()->get(AclBuilder::class)->getAcl();
 
         $this->assertTrue($acl->hasResource('MageOS_Aeo::config'));
-        $this->assertTrue($acl->inheritsResource('MageOS_Aeo::config', 'MageOS_Seo::seo'));
+        $this->assertTrue($acl->inheritsResource('MageOS_Aeo::config', 'Magento_Config::config'));
     }
 
     /**

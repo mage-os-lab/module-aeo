@@ -75,12 +75,15 @@ straight away, run `bin/magento seo:rebuild -g llms`.
 
 | Group | Key settings | Default |
 | --- | --- | --- |
-| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents | Yes / Yes / **No** / `global` |
+| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents, Leave Out NOINDEX Pages ([docs/llms-txt.md](docs/llms-txt.md#noindex-pages)) | Yes / Yes / **No** / `global` / Yes |
 | Feed Storage | Where the pre-generated feeds are written | *(empty — `var/mageos_aeo`)* |
 | AI Crawler robots.txt | Append directives, disallow list | **No** / CCBot,Bytespider |
 
-The section is guarded by the ACL resource `MageOS_Aeo::config`, under MageOS_Seo's
-`MageOS_Seo::seo`.
+Changing the AI crawler settings purges every store view's robots.txt from the page cache, once
+the save is committed; core caches it under `robots_<store ID>`.
+
+The section is guarded by the ACL resource `MageOS_Aeo::config`, under Stores → Settings →
+Configuration in the role editor, with every other configuration section's.
 
 Identifiers this module owns:
 - **Feed groups** on MageOS_Seo's rebuild queue: `llms` (`/llms.txt` and `/llms-full.txt`) and

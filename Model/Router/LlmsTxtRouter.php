@@ -20,7 +20,7 @@ class LlmsTxtRouter implements RouterInterface
 {
     /**
      * Request path => the controller that answers it. The same paths are registered as public in
-     * di.xml (MageOS\Seo\Model\Router\PublicPaths), so no session is started for them.
+     * di.xml (MageOS_Seo's Api\Router\PublicPathsInterface), so no session is started for them.
      */
     private const ROUTES = [
         'llms.txt'      => ['module' => 'mageos-aeo', 'controller' => 'llms',      'action' => 'index'],

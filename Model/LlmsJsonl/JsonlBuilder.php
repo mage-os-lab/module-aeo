@@ -10,9 +10,11 @@ use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\JsonlLineProviderInterface;
+use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
-use MageOS\Seo\Model\Product\AvailabilityResolver;
-use MageOS\Seo\Model\Rebuild\ProblemLog;
+use MageOS\Seo\Api\Product\AvailabilityResolverInterface;
+use MageOS\Seo\Api\Rebuild\ProblemLogInterface;
+use MageOS\Seo\Api\Robots\PageDirectivesInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -20,10 +22,15 @@ use Psr\Log\LoggerInterface;
  * any lines contributed by bridge JsonlLineProviderInterface implementations.
  *
  * The catalog is processed in pages, with URL rewrites loaded with the collection and availability
- * resolved for the whole page at once by MageOS_Seo's AvailabilityResolver (the stock index, as the
- * storefront reads it: one or two queries a page), so large catalogs neither exhaust memory nor run
- * a stock lookup per product. Each product's price is still its own PriceInfo, the price a visitor
- * is shown, which is why the collection loads the special price attributes PriceInfo reads.
+ * resolved for the whole page at once by MageOS_Seo's AvailabilityResolverInterface (the stock
+ * index, as the storefront reads it: one or two queries a page), so large catalogs neither exhaust
+ * memory nor run a stock lookup per product. Each product's price is still its own PriceInfo, the
+ * price a visitor is shown, which is why the collection loads the special price attributes
+ * PriceInfo reads.
+ *
+ * While Leave Out NOINDEX Pages is on (the default), a product whose page is NOINDEX is left out, as
+ * search engines are told to (review M4): its directive is read with the page's, a page of products
+ * at a time, through MageOS_Seo's PageDirectivesInterface.
  */
 class JsonlBuilder
 {
@@ -33,19 +40,23 @@ class JsonlBuilder
      * @param CollectionFactory $collectionFactory
      * @param ProductLineBuilder $productLineBuilder
      * @param StoreManagerInterface $storeManager
-     * @param AvailabilityResolver $availabilityResolver
+     * @param AvailabilityResolverInterface $availabilityResolver
      * @param LoggerInterface $logger
-     * @param ProblemLog $problemLog
+     * @param ProblemLogInterface $problemLog
+     * @param Config $aeoConfig
+     * @param PageDirectivesInterface $pageDirectives
      * @param array<mixed> $lineProviders
      */
     public function __construct(
-        private readonly CollectionFactory     $collectionFactory,
-        private readonly ProductLineBuilder    $productLineBuilder,
-        private readonly StoreManagerInterface $storeManager,
-        private readonly AvailabilityResolver  $availabilityResolver,
-        private readonly LoggerInterface       $logger,
-        private readonly ProblemLog            $problemLog,
-        private readonly array                 $lineProviders = []
+        private readonly CollectionFactory             $collectionFactory,
+        private readonly ProductLineBuilder            $productLineBuilder,
+        private readonly StoreManagerInterface         $storeManager,
+        private readonly AvailabilityResolverInterface $availabilityResolver,
+        private readonly LoggerInterface               $logger,
+        private readonly ProblemLogInterface           $problemLog,
+        private readonly Config                        $aeoConfig,
+        private readonly PageDirectivesInterface       $pageDirectives,
+        private readonly array                         $lineProviders = []
     ) {
     }
 
@@ -79,7 +90,8 @@ class JsonlBuilder
         $collection->addUrlRewrite();
         $collection->setPageSize(self::PAGE_SIZE);
 
-        $lastPage = $collection->getLastPageNumber();
+        $lastPage       = $collection->getLastPageNumber();
+        $excludeNoindex = $this->aeoConfig->isNoindexExcluded($storeId);
 
         for ($page = 1; $page <= $lastPage; $page++) {
             $collection->setCurPage($page);
@@ -91,13 +103,20 @@ class JsonlBuilder
                     $products[] = $product;
                 }
             }
-            // The page's availability at once, instead of a lookup per product.
+            if ($excludeNoindex) {
+                $products = $this->indexable($products, $storeId);
+            }
+            // The page's configurables' variants at once, instead of each configurable's on its own.
+            $this->productLineBuilder->prefetch($products);
+            // The page's availability at once, instead of a lookup per product; null when it failed.
             $availability = $this->resolveAvailability($products, $storeId);
 
             foreach ($products as $product) {
                 $line = $this->encode($this->productLineBuilder->build(
                     $product,
-                    $availability[(string) $product->getSku()] ?? AvailabilityResolver::OUT_OF_STOCK
+                    $availability === null
+                        ? null
+                        : ($availability[(string) $product->getSku()] ?? AvailabilityResolverInterface::OUT_OF_STOCK)
                 ));
                 if ($line !== '') {
                     yield $line . "\n";
@@ -119,26 +138,50 @@ class JsonlBuilder
     }
 
     /**
-     * Resolve the availability of a page of products at once.
-     *
-     * A product the stock index has no row for is out of stock. When the lookup fails, every product
-     * in the page is reported out of stock and the failure is logged rather than aborting the whole
-     * feed build. The admin is shown the store view's llms.jsonl as incomplete until a rebuild gets
-     * through.
+     * The products whose pages are not NOINDEX.
      *
      * @param ProductInterface[] $products
      * @param int $storeId
-     * @return array<string, string> SKU => schema.org availability
+     * @return ProductInterface[]
      */
-    private function resolveAvailability(array $products, int $storeId): array
+    private function indexable(array $products, int $storeId): array
     {
         if ($products === []) {
             return [];
         }
 
-        $availability = [];
+        $directives = $this->pageDirectives->forProducts(
+            array_map(static fn (ProductInterface $product): int => (int) $product->getId(), $products),
+            $storeId
+        );
+
+        return array_values(array_filter(
+            $products,
+            fn (ProductInterface $product): bool
+                => !$this->pageDirectives->isNoindex($directives[(int) $product->getId()] ?? '')
+        ));
+    }
+
+    /**
+     * Resolve the availability of a page of products at once, or null when the lookup failed.
+     *
+     * A product the stock index has no row for is out of stock. When the lookup fails, the page's
+     * products are listed without an availability (decision D8a: not as out of stock, which nothing
+     * backs) and the failure is logged rather than aborting the whole feed build. The admin is shown
+     * the store view's llms.jsonl as incomplete until a rebuild gets through.
+     *
+     * @param ProductInterface[] $products
+     * @param int $storeId
+     * @return array<string, string>|null SKU => schema.org availability
+     */
+    private function resolveAvailability(array $products, int $storeId): ?array
+    {
+        if ($products === []) {
+            return [];
+        }
+
         try {
-            $availability = $this->availabilityResolver->resolveMany($products);
+            return $this->availabilityResolver->resolveMany($products);
         } catch (\Exception $e) {
             $this->logger->error(
                 'MageOS_Aeo: llms.jsonl stock lookup failed: ' . $e->getMessage(),
@@ -147,11 +190,11 @@ class JsonlBuilder
             $this->problemLog->degraded(
                 FeedRegenerator::GROUP_JSONL,
                 $storeId,
-                __('The stock lookup failed, so some products are listed as out of stock.')
+                __('The stock lookup failed, so some products are listed without their availability.')
             );
-        }
 
-        return $availability;
+            return null;
+        }
     }
 
     /**

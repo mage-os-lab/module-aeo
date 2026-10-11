@@ -6,21 +6,22 @@ namespace MageOS\Aeo\Test\Unit\Model\LlmsTxt;
 
 use Magento\Catalog\Model\ResourceModel\Category\Collection as CategoryCollection;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
-use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\DataObject;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\Store\Model\Website;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Model\LlmsTxt\LlmsTxtBuilder;
 use MageOS\Aeo\Model\LlmsTxt\PolicyPages;
 use MageOS\Aeo\Model\LlmsTxt\SitemapUrlResolver;
 use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
+use MageOS\Seo\Api\ContactEmailInterface;
 use MageOS\Seo\Api\Data\OrganizationInterface;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
-use MageOS\Seo\Model\Config;
-use MageOS\Seo\Model\Organization\ContactEmail;
-use MageOS\Seo\Model\Product\SchemaBuilderPool;
+use MageOS\Seo\Api\Product\SchemaTemplatesInterface;
+use MageOS\Seo\Api\Robots\PageDirectivesInterface;
+use MageOS\Seo\Api\StorefrontSettingsInterface;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -55,19 +56,14 @@ class LlmsTxtBuilderTest extends TestCase
     private OrganizationInterface&Stub $organization;
 
     /**
-     * @var ScopeConfigInterface&Stub
-     */
-    private ScopeConfigInterface&Stub $scopeConfig;
-
-    /**
      * @var CategoryCollectionFactory&Stub
      */
     private CategoryCollectionFactory&Stub $categoryCollectionFactory;
 
     /**
-     * @var SchemaBuilderPool&Stub
+     * @var SchemaTemplatesInterface&Stub
      */
-    private SchemaBuilderPool&Stub $builderPool;
+    private SchemaTemplatesInterface&Stub $schemaTemplates;
 
     /**
      * @var StoreManagerInterface&Stub
@@ -115,24 +111,26 @@ class LlmsTxtBuilderTest extends TestCase
         $this->organization = $this->createStub(OrganizationInterface::class);
         $this->organization->method('getName')->willReturn('Test Shop');
 
-        $this->scopeConfig = $this->createStub(ScopeConfigInterface::class);
-        $this->scopeConfig->method('getValue')->willReturnMap([
-            ['catalog/seo/category_url_suffix', 'store', 1, '.html'],
-        ]);
-
-        $this->builderPool = $this->createStub(SchemaBuilderPool::class);
-        $this->builderPool->method('getAvailableTemplates')->willReturn([
+        $this->schemaTemplates = $this->createStub(SchemaTemplatesInterface::class);
+        $this->schemaTemplates->method('getAvailableTemplates')->willReturn([
             'GenericProduct' => 'Generic product',
             'Book'           => 'Book',
         ]);
 
+        // Each with its URL rewrite's request path, as joinUrlRewrite() loads it.
         $this->categoryCollectionFactory = $this->createStub(CategoryCollectionFactory::class);
         $this->categoryCollectionFactory->method('create')->willReturn($this->categoryCollection([
-            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
-            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => "Men's [Sale]", 'url_path' => 'clothing/mens-sale'],
-            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids (new)'],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'request_path' => 'clothing.html'],
+            [
+                'id'           => 4,
+                'parent_id'    => 3,
+                'level'        => 3,
+                'name'         => "Men's [Sale]",
+                'request_path' => 'clothing/mens-sale.html',
+            ],
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'request_path' => 'kids (new).html'],
             // Child of an inactive parent (5 is not in the collection): must be skipped.
-            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden', 'url_path' => 'hidden/child'],
+            ['id' => 6, 'parent_id' => 5, 'level' => 3, 'name' => 'Hidden', 'request_path' => 'hidden/child.html'],
         ]));
         // Category 4 lists nothing, so the count has no entry for it.
         $this->listed = [3 => 245, 7 => 3, 6 => 9];
@@ -234,9 +232,9 @@ class LlmsTxtBuilderTest extends TestCase
         // is higher, and Clothing's subcategory still goes under Clothing, after Kids.
         $factory = $this->createStub(CategoryCollectionFactory::class);
         $factory->method('create')->willReturn($this->categoryCollection([
-            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'url_path' => 'kids'],
-            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'url_path' => 'clothing'],
-            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => 'Shirts', 'url_path' => 'clothing/shirts'],
+            ['id' => 7, 'parent_id' => 2, 'level' => 2, 'name' => 'Kids', 'request_path' => 'kids.html'],
+            ['id' => 3, 'parent_id' => 2, 'level' => 2, 'name' => 'Clothing', 'request_path' => 'clothing.html'],
+            ['id' => 4, 'parent_id' => 3, 'level' => 3, 'name' => 'Shirts', 'request_path' => 'clothing/shirts.html'],
         ]));
         $this->categoryCollectionFactory = $factory;
 
@@ -365,21 +363,25 @@ class LlmsTxtBuilderTest extends TestCase
         $this->levelFilters = [];
         $repository = $this->createStub(OrganizationRepositoryInterface::class);
         $repository->method('getForScope')->willReturn($this->organization);
-        $seoConfig = $this->createStub(Config::class);
+        $seoConfig = $this->createStub(StorefrontSettingsInterface::class);
         $seoConfig->method('getLocaleCode')->willReturnMap([[1, 'en_GB']]);
-        $contactEmail = $this->createStub(ContactEmail::class);
+        $contactEmail = $this->createStub(ContactEmailInterface::class);
         $contactEmail->method('get')->willReturn('support@shop.test');
         $sitemapResolver = $this->createStub(SitemapUrlResolver::class);
         $sitemapResolver->method('getUrl')->willReturn($this->sitemapUrl);
+        // Leave Out NOINDEX Pages is the integration tests' (NoindexCategoriesTest).
+        $aeoConfig = $this->createStub(AeoConfig::class);
+        $aeoConfig->method('isNoindexExcluded')->willReturn(false);
 
         return new LlmsTxtBuilder(
             $repository,
             $this->storeManager,
-            $this->scopeConfig,
+            $aeoConfig,
             $this->categoryCollectionFactory,
-            $this->builderPool,
+            $this->schemaTemplates,
             $seoConfig,
             $contactEmail,
+            $this->createStub(PageDirectivesInterface::class),
             $sitemapResolver,
             $categoryProductCount,
             $policyPages,
@@ -413,7 +415,7 @@ class LlmsTxtBuilderTest extends TestCase
         }
 
         $collection = $this->createStub(CategoryCollection::class);
-        foreach (['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addOrder'] as $method) {
+        foreach (['setStoreId', 'addAttributeToSelect', 'addPathsFilter', 'addOrder', 'joinUrlRewrite'] as $method) {
             $collection->method($method)->willReturnSelf();
         }
         // The level filter is recorded: it is what keeps the concise document to the top level.

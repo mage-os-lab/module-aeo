@@ -86,8 +86,9 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * When the stock lookup fails, every product of the batch is written as out of stock: the file
-     * is served, and the admin is told it is incomplete until a rebuild gets through.
+     * When the stock lookup fails, every product of the batch is written without its availability
+     * (decision D8a: not as out of stock, which nothing backs): the file is served, and the admin is
+     * told it is incomplete until a rebuild gets through.
      *
      * @return void
      */
@@ -102,11 +103,17 @@ class RebuildProblemsTest extends TestCase
 
         // The lookup only runs for a page with products in it: the fixture must have been listed,
         // whatever else the database holds.
-        $sku = (string) DataFixtureStorageManager::getStorage()->get('product')->getSku();
-        $this->assertStringContainsString(
-            '"sku":"' . $sku . '"',
-            (string) Bootstrap::getObjectManager()->get(FeedStorage::class)->read('llms.jsonl', $this->storeId())
-        );
+        $sku    = (string) DataFixtureStorageManager::getStorage()->get('product')->getSku();
+        $listed = null;
+        $feed   = (string) Bootstrap::getObjectManager()->get(FeedStorage::class)->read('llms.jsonl', $this->storeId());
+        foreach (explode("\n", $feed) as $each) {
+            $node = json_decode($each, true);
+            if (\is_array($node) && ($node['sku'] ?? null) === $sku) {
+                $listed = $node;
+            }
+        }
+        $this->assertNotNull($listed, 'The product is listed.');
+        $this->assertArrayNotHasKey('availability', $listed['offers'], 'An availability nothing backs is left out.');
 
         $problems = $this->problemLog()->all();
         $this->assertSame(ProblemLog::KIND_DEGRADED, $problems['jsonl'][$this->storeId()]['kind'] ?? null);
@@ -116,7 +123,7 @@ class RebuildProblemsTest extends TestCase
         $this->assertStringStartsWith('llms.jsonl for store "Default Store View" is incomplete (since ', $line);
         $this->assertStringContainsString('It will be retried automatically at ', $line);
         $this->assertStringEndsWith(
-            'Reason: The stock lookup failed, so some products are listed as out of stock.',
+            'Reason: The stock lookup failed, so some products are listed without their availability.',
             $line
         );
 

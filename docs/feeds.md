@@ -150,6 +150,11 @@ Measured on the test installation with PHP's `memory_limit` lowered to 64M: a 20
 | Mass website assignment change | always | always |
 | Organisation settings saved | always | — |
 | FAQ saved or deleted | always | — |
+| A product's MageOS_Seo settings saved or deleted (its robots directive among them) | — | always |
+| A category's MageOS_Seo settings saved or deleted (its robots directive among them) | always | — |
+| Configuration: Leave Out NOINDEX Pages, core's Default Robots | when the value changes | when the value changes |
+| Configuration: MageOS_Seo's Category Pages robots default | when the value changes | — |
+| Configuration: MageOS_Seo's Product Pages robots default | — | when the value changes |
 | Configuration: locale, Customer Support email, FAQ Groups, Pages Listed in llms.txt, return policy | when the value changes | — |
 | Configuration: `web/` (base URLs), `catalog/seo/` (URL suffixes, category paths) | when the value changes | when the value changes |
 | Configuration: `currency/`, price scope, Display Out of Stock Products | — | when the value changes |
@@ -221,10 +226,18 @@ products, not of the whole document — at 100k SKUs the document runs to tens o
 Availability is read for a page of 1,000 products in one query from MSI's stock index, plus one
 for whether stock is managed when some product on the page is salable at zero or below. Each
 product's price is its own `PriceInfo`, the price a visitor is shown: its tier prices and catalog
-rules, and a configurable's children, are read per product. Measured on Luma's sample catalogue
-(180 lines, one store view): 816 queries and 1.9 seconds, where a per-product stock check made it
-2,960 queries and 7.0 seconds. The cost grows with the catalogue; it is paid in the queue consumer
-and the nightly cron, never in a web request.
+rules are read per product.
+
+A configurable's offer is its product page's, from the variants the storefront sells. They are
+read a page at a time: one collection for every configurable on the page, their stock in one query
+(MageOS_Seo's `OfferSummaryInterface::prefetch()`). A configurable without an image of its own
+borrows its first sold variant's from the same read.
+
+Measured on Luma's sample catalogue (179 lines, one store view, 147 configurables): 821 queries.
+Reading each configurable's variants through core's provider took 2,440, about ten queries a
+configurable; before configurables carried their page's offer, 816; before availability was read a
+page at a time, 2,960. The cost grows with the catalogue; it is paid in the queue consumer and the
+nightly cron, never in a web request.
 
 MageOS_Seo streams the XML sitemaps the same way, a page of the catalogue at a time; see its
 [sitemap.md](https://github.com/mage-os-lab/module-seo/blob/main/docs/sitemap.md).
