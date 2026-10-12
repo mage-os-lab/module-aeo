@@ -12,6 +12,8 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+## [1.1.0] 2026-10-12
+
 ### Added
 
 - **Leave Out NOINDEX Pages** (AI Discoverability, default Yes, per store view; review M4,
