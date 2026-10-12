@@ -13,6 +13,12 @@
             <module name="Magento_Catalog"/>
             <module name="Magento_Store"/>
             <module name="Magento_Robots"/>
+            <!--
+                Magento's remote storage, where the feeds are kept while it is on, and its S3
+                driver's cached credentials, which the feeds' own read client uses.
+            -->
+            <module name="Magento_RemoteStorage"/>
+            <module name="Magento_AwsS3"/>
         </sequence>
     </module>
 </config>

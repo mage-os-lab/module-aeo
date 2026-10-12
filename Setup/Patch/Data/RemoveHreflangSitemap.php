@@ -7,7 +7,7 @@ namespace MageOS\Aeo\Setup\Patch\Data;
 use Magento\Framework\Setup\Patch\DataPatchInterface;
 use MageOS\Aeo\Model\Feed\FeedCache;
 use MageOS\Aeo\Model\Feed\FeedStorage;
-use MageOS\Seo\Model\Rebuild\RegenerationRequester;
+use MageOS\Seo\Api\Rebuild\RegenerationRequesterInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -42,15 +42,15 @@ class RemoveHreflangSitemap implements DataPatchInterface
 
     /**
      * @param FeedStorage $feedStorage
-     * @param RegenerationRequester $regenerationRequester
+     * @param RegenerationRequesterInterface $regenerationRequester
      * @param FeedCache $feedCache
      * @param LoggerInterface $logger
      */
     public function __construct(
-        private readonly FeedStorage           $feedStorage,
-        private readonly RegenerationRequester $regenerationRequester,
-        private readonly FeedCache             $feedCache,
-        private readonly LoggerInterface       $logger
+        private readonly FeedStorage                    $feedStorage,
+        private readonly RegenerationRequesterInterface $regenerationRequester,
+        private readonly FeedCache                      $feedCache,
+        private readonly LoggerInterface                $logger
     ) {
     }
 

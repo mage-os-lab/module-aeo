@@ -6,15 +6,16 @@ namespace MageOS\Aeo\Model\LlmsTxt;
 
 use Magento\Catalog\Model\ResourceModel\Category\Collection as CategoryCollection;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
-use Magento\Framework\App\Config\ScopeConfigInterface;
-use Magento\Store\Model\ScopeInterface;
+use Magento\Framework\DataObject;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Api\LlmsTxtSectionProviderInterface;
+use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\ResourceModel\CategoryProductCount;
+use MageOS\Seo\Api\ContactEmailInterface;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
-use MageOS\Seo\Model\Config;
-use MageOS\Seo\Model\Organization\ContactEmail;
-use MageOS\Seo\Model\Product\SchemaBuilderPool;
+use MageOS\Seo\Api\Product\SchemaTemplatesInterface;
+use MageOS\Seo\Api\Robots\PageDirectivesInterface;
+use MageOS\Seo\Api\StorefrontSettingsInterface;
 
 /**
  * Builds the /llms.txt and /llms-full.txt document bodies.
@@ -40,9 +41,12 @@ use MageOS\Seo\Model\Product\SchemaBuilderPool;
  * The text is in the store view's language, like the rest of its storefront: headings, labels and
  * notes are translated phrases; the markdown structure around them is not.
  *
- * The locale is the store view's configured one (Config::getLocaleCode()); the line is left out
- * when there is none. The AI contact is Organization\ContactEmail's; the line is left out when
- * there is none.
+ * The locale is the store view's configured one (MageOS_Seo's StorefrontSettingsInterface); the line
+ * is left out when there is none. The AI contact is MageOS_Seo's ContactEmailInterface's; the line is
+ * left out when there is none.
+ *
+ * While Leave Out NOINDEX Pages is on (the default), a category whose page is NOINDEX is left out,
+ * as search engines are told to (review M4); see buildCategorySection().
  */
 class LlmsTxtBuilder
 {
@@ -78,11 +82,12 @@ class LlmsTxtBuilder
     /**
      * @param OrganizationRepositoryInterface $organizationRepository
      * @param StoreManagerInterface $storeManager
-     * @param ScopeConfigInterface $scopeConfig
+     * @param Config $aeoConfig
      * @param CategoryCollectionFactory $categoryCollectionFactory
-     * @param SchemaBuilderPool $builderPool
-     * @param Config $seoConfig
-     * @param ContactEmail $contactEmail
+     * @param SchemaTemplatesInterface $schemaTemplates
+     * @param StorefrontSettingsInterface $seoConfig
+     * @param ContactEmailInterface $contactEmail
+     * @param PageDirectivesInterface $pageDirectives
      * @param SitemapUrlResolver $sitemapUrlResolver
      * @param CategoryProductCount $categoryProductCount
      * @param PolicyPages $policyPages
@@ -91,11 +96,12 @@ class LlmsTxtBuilder
     public function __construct(
         private readonly OrganizationRepositoryInterface $organizationRepository,
         private readonly StoreManagerInterface           $storeManager,
-        private readonly ScopeConfigInterface            $scopeConfig,
+        private readonly Config                          $aeoConfig,
         private readonly CategoryCollectionFactory       $categoryCollectionFactory,
-        private readonly SchemaBuilderPool               $builderPool,
-        private readonly Config                          $seoConfig,
-        private readonly ContactEmail                    $contactEmail,
+        private readonly SchemaTemplatesInterface        $schemaTemplates,
+        private readonly StorefrontSettingsInterface     $seoConfig,
+        private readonly ContactEmailInterface           $contactEmail,
+        private readonly PageDirectivesInterface         $pageDirectives,
         private readonly SitemapUrlResolver              $sitemapUrlResolver,
         private readonly CategoryProductCount            $categoryProductCount,
         private readonly PolicyPages                     $policyPages,
@@ -238,7 +244,7 @@ class LlmsTxtBuilder
         // schema.org types an agent can look for, not this module's template codes.
         // The list says what the store's pages can carry: templates are assigned per
         // category or product, so "registered" is not the same as "in use".
-        $templates = $this->builderPool->getAvailableTemplates();
+        $templates = $this->schemaTemplates->getAvailableTemplates();
         if (!empty($templates)) {
             $productTypes = [];
             foreach (array_keys($templates) as $templateCode) {
@@ -288,6 +294,14 @@ class LlmsTxtBuilder
      * failed build and keeps the previous file, which is better than publishing a file without its
      * categories.
      *
+     * While Leave Out NOINDEX Pages is on, a category whose page is NOINDEX (its own directive, an
+     * ancestor's, or a default: MageOS_Seo's PageDirectivesInterface) is left out (review M4). Its
+     * subcategories that are themselves indexable take its place in the tree, under its nearest
+     * listed ancestor (decision D3a); /llms.txt, top level only, just leaves it out.
+     *
+     * Each link is the category's URL rewrite, the URL its page answers at; a category without one
+     * links to its catalog/category/view URL, which answers too, rather than to a guessed path.
+     *
      * @param string $baseUrl
      * @param bool $full
      * @return string
@@ -304,27 +318,25 @@ class LlmsTxtBuilder
         $collection = $this->categoryCollectionFactory->create();
         // Store scoping is essential: without setStoreId + the root-path filter
         // this would list every website's categories (including hidden B2B or
-        // staging trees) and pair their url_path with this store's base URL.
+        // staging trees) and pair their URLs with this store's base URL.
         $collection->setStoreId($storeId)
-            ->addAttributeToSelect(['name', 'url_path', 'is_active'])
+            ->addAttributeToSelect(['name', 'is_active'])
             ->addPathsFilter(['1/' . $rootId . '/'])
             ->addAttributeToFilter('is_active', (string) 1)
             ->addAttributeToFilter('include_in_menu', (string) 1)
             // Level 2 is the top level: the store's root category is level 1.
-            ->addAttributeToFilter('level', $full ? ['gt' => '1'] : '2');
+            ->addAttributeToFilter('level', $full ? ['gt' => '1'] : '2')
+            // Each category's own request path in this store view, in the same query.
+            ->joinUrlRewrite();
         // The menu's order: by position among siblings, ties by parent and ID, as core sorts it.
         foreach (['level', 'position', 'parent_id', 'entity_id'] as $field) {
             $collection->addOrder($field, CategoryCollection::SORT_ORDER_ASC);
         }
 
+        $categoryIds = array_map('intval', array_keys($collection->getItems()));
         // What each category page lists, an anchor's subcategories included: one query.
-        $counts = $this->categoryProductCount->countListed($storeId, array_keys($collection->getItems()));
-
-        $urlSuffix = (string) $this->scopeConfig->getValue(
-            'catalog/seo/category_url_suffix',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
-        );
+        $counts  = $this->categoryProductCount->countListed($storeId, $categoryIds);
+        $hidden  = $this->noindexCategoryIds($categoryIds, $storeId);
 
         $children = [];
         foreach ($collection as $category) {
@@ -333,22 +345,27 @@ class LlmsTxtBuilder
 
         // Depth first from the root, so a category is listed only under a listed parent: one
         // that is disabled or left out of the menu takes its subcategories with it, though each
-        // of them is still active and in the menu itself.
-        $pending = array_reverse($children[$rootId] ?? []);
+        // of them is still active and in the menu itself. A NOINDEX category is not listed, but
+        // its subcategories take its place, at its depth.
+        $pending = array_map(
+            static fn (DataObject $category): array => [$category, 0],
+            array_reverse($children[$rootId] ?? [])
+        );
         while ($pending !== []) {
-            $category = array_pop($pending);
-            foreach (array_reverse($children[(int) $category->getId()] ?? []) as $child) {
-                $pending[] = $child;
+            [$category, $depth] = array_pop($pending);
+            $categoryId         = (int) $category->getId();
+            $listed             = !isset($hidden[$categoryId]);
+            foreach (array_reverse($children[$categoryId] ?? []) as $child) {
+                $pending[] = [$child, $listed ? $depth + 1 : $depth];
+            }
+            if (!$listed) {
+                continue;
             }
 
-            $level  = max(0, (int) $category->getLevel() - 2);
-            $indent = str_repeat('  ', $level);
-            $url    = strtr(
-                $baseUrl . '/' . ltrim((string) $category->getUrlPath(), '/') . $urlSuffix,
-                self::URL_REPLACEMENTS
-            );
+            $indent = str_repeat('  ', $depth);
+            $url    = strtr($this->categoryUrl($category, $baseUrl), self::URL_REPLACEMENTS);
             $label  = $this->linkLabel((string) $category->getName());
-            $count  = $counts[(int) $category->getId()] ?? 0;
+            $count  = $counts[$categoryId] ?? 0;
             $note   = $count > 0 ? ': ' . __('%1 products', $count) : '';
             $items[] = "{$indent}- [{$label}]({$url}){$note}";
         }
@@ -358,6 +375,45 @@ class LlmsTxtBuilder
         }
 
         return implode("\n", array_merge(['## ' . ($full ? __('Category Tree') : __('Categories')), ''], $items));
+    }
+
+    /**
+     * The categories left out as NOINDEX, as keys; none while Leave Out NOINDEX Pages is off.
+     *
+     * @param int[] $categoryIds
+     * @param int $storeId
+     * @return array<int, true>
+     */
+    private function noindexCategoryIds(array $categoryIds, int $storeId): array
+    {
+        if (!$this->aeoConfig->isNoindexExcluded($storeId)) {
+            return [];
+        }
+
+        $hidden = [];
+        foreach ($this->pageDirectives->forCategories($categoryIds, $storeId) as $categoryId => $directive) {
+            if ($this->pageDirectives->isNoindex($directive)) {
+                $hidden[$categoryId] = true;
+            }
+        }
+
+        return $hidden;
+    }
+
+    /**
+     * The URL the category's page answers at: its URL rewrite, else its catalog/category/view URL.
+     *
+     * @param DataObject $category A category of the collection, loaded with its request path
+     * @param string $baseUrl
+     * @return string
+     */
+    private function categoryUrl(DataObject $category, string $baseUrl): string
+    {
+        $requestPath = ltrim((string) $category->getData('request_path'), '/');
+
+        return $requestPath !== ''
+            ? $baseUrl . '/' . $requestPath
+            : $baseUrl . '/catalog/category/view/id/' . (int) $category->getId();
     }
 
     /**

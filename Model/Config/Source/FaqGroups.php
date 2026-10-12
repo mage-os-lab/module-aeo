@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Model\Config\Source;
 
 use Magento\Framework\Data\OptionSourceInterface;
-use MageOS\Seo\Model\Faq\SourcePool;
+use MageOS\Seo\Api\FaqSourcePoolInterface;
 
 /**
  * The FAQ groups the llms documents can include: every group identifier any FAQ source has —
@@ -20,10 +20,10 @@ class FaqGroups implements OptionSourceInterface
     public const DEFAULT_GROUP = 'global';
 
     /**
-     * @param SourcePool $sourcePool
+     * @param FaqSourcePoolInterface $sourcePool
      */
     public function __construct(
-        private readonly SourcePool $sourcePool
+        private readonly FaqSourcePoolInterface $sourcePool
     ) {
     }
 

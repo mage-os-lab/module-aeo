@@ -7,7 +7,7 @@ namespace MageOS\Aeo\Model\LlmsTxt;
 use Magento\Cms\Api\GetPageByIdentifierInterface;
 use Magento\Framework\Exception\NoSuchEntityException;
 use MageOS\Aeo\Model\Config;
-use MageOS\Seo\Model\Config as SeoConfig;
+use MageOS\Seo\Api\StorefrontSettingsInterface;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -23,13 +23,13 @@ class PolicyPages
 {
     /**
      * @param Config $aeoConfig
-     * @param SeoConfig $seoConfig
+     * @param StorefrontSettingsInterface $seoConfig
      * @param GetPageByIdentifierInterface $getPageByIdentifier
      * @param LoggerInterface $logger
      */
     public function __construct(
         private readonly Config                       $aeoConfig,
-        private readonly SeoConfig                    $seoConfig,
+        private readonly StorefrontSettingsInterface  $seoConfig,
         private readonly GetPageByIdentifierInterface $getPageByIdentifier,
         private readonly LoggerInterface              $logger
     ) {

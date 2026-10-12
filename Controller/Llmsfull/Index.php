@@ -5,15 +5,18 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Controller\Llmsfull;
 
 use Magento\Framework\App\Action\HttpGetActionInterface;
+use Magento\Framework\App\ResponseInterface;
 use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Framework\Controller\ResultInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
 use MageOS\Aeo\Model\Feed\FeedCache;
+use MageOS\Aeo\Model\Feed\FeedDelivery;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
-use MageOS\Seo\Model\Rebuild\RegenerationRequester;
-use MageOS\Seo\Model\Router\CanonicalPathRedirect;
+use MageOS\Seo\Api\Rebuild\RegenerationRequesterInterface;
+use MageOS\Seo\Api\Router\CanonicalPathRedirectInterface;
 
 class Index implements HttpGetActionInterface
 {
@@ -23,17 +26,19 @@ class Index implements HttpGetActionInterface
      * @param RawFactory $rawFactory
      * @param Config $aeoConfig
      * @param FeedStorage $feedStorage
-     * @param CanonicalPathRedirect $canonicalPathRedirect
-     * @param RegenerationRequester $regenerationRequester
+     * @param CanonicalPathRedirectInterface $canonicalPathRedirect
+     * @param RegenerationRequesterInterface $regenerationRequester
      * @param StoreManagerInterface $storeManager
+     * @param FeedDelivery $feedDelivery
      */
     public function __construct(
-        private readonly RawFactory            $rawFactory,
-        private readonly Config                $aeoConfig,
-        private readonly FeedStorage           $feedStorage,
-        private readonly CanonicalPathRedirect $canonicalPathRedirect,
-        private readonly RegenerationRequester $regenerationRequester,
-        private readonly StoreManagerInterface $storeManager,
+        private readonly RawFactory                     $rawFactory,
+        private readonly Config                         $aeoConfig,
+        private readonly FeedStorage                    $feedStorage,
+        private readonly CanonicalPathRedirectInterface $canonicalPathRedirect,
+        private readonly RegenerationRequesterInterface $regenerationRequester,
+        private readonly StoreManagerInterface          $storeManager,
+        private readonly FeedDelivery                   $feedDelivery,
     ) {
     }
 
@@ -42,10 +47,11 @@ class Index implements HttpGetActionInterface
      *
      * Web requests never build the document: a missing file queues a rebuild and
      * answers 503 Retry-After, so anonymous traffic cannot trigger catalog builds.
+     * A file over 0.5 MiB is streamed rather than read into memory (FeedDelivery).
      *
-     * @return ResultInterface
+     * @return ResultInterface|ResponseInterface
      */
-    public function execute(): ResultInterface
+    public function execute(): ResultInterface|ResponseInterface
     {
         $redirect = $this->canonicalPathRedirect->check(self::FILE);
         if ($redirect !== null) {
@@ -61,8 +67,17 @@ class Index implements HttpGetActionInterface
         }
 
         $storeId = (int) $this->storeManager->getStore()->getId();
-        $content = $this->feedStorage->read(self::FILE, $storeId);
-        if ($content === null) {
+        try {
+            $file = $this->feedStorage->open(self::FILE, $storeId);
+        } catch (FeedStorageUnavailableException) {
+            // The storage directory, not the file: a rebuild cannot fix that, so none is queued.
+            $result->setHttpResponseCode(503);
+            $result->setHeader('Retry-After', '300', true);
+            $result->setHeader('Cache-Control', 'no-store', true);
+            $result->setContents('');
+            return $result;
+        }
+        if ($file === null) {
             $this->regenerationRequester->request(FeedRegenerator::GROUP_LLMS);
             $result->setHttpResponseCode(503);
             $result->setHeader('Retry-After', '120', true);
@@ -70,12 +85,6 @@ class Index implements HttpGetActionInterface
             return $result;
         }
 
-        $result->setHttpResponseCode(200);
-        $result->setHeader('Content-Type', 'text/plain; charset=utf-8', true);
-        $result->setHeader('Cache-Control', FeedCache::CACHE_CONTROL, true);
-        $result->setHeader('X-Magento-Tags', FeedCache::TAG_LLMS_FULL, true);
-        $result->setContents($content);
-
-        return $result;
+        return $this->feedDelivery->deliver($file, 'text/plain; charset=utf-8', FeedCache::TAG_LLMS_FULL);
     }
 }

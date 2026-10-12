@@ -60,20 +60,50 @@
     </event>
 
     <!--
-        Configuration. Every way a value reaches the database saves its backend model — the admin's
-        configuration pages and `bin/magento config:set` — so this is the one hook both share. The
-        admin saves every field of a section, changed or not; the policy counts a value only when it
-        changed, and only under the paths that change what the documents show (locale, AI contact,
-        llms settings, URLs). Values config:set locks into app/etc/env.php (its lock-env option)
-        never reach the database, and so are not seen.
+        A page's robots directive decides whether the feeds list it (Leave Out NOINDEX Pages,
+        review M4). A product's is in its MageOS_Seo override, and llms.jsonl lists products; a
+        category's is in its MageOS_Seo category settings, and the llms documents list categories.
+        MageOS_Seo's own model events, so every way the settings are written counts.
     -->
-    <event name="config_data_save_after">
-        <observer name="mageos_aeo_invalidate_llms_on_config_save"
+    <event name="mageos_seo_product_override_save_after">
+        <observer name="mageos_aeo_invalidate_llms_jsonl_on_product_override_save"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsJsonlCache"/>
+    </event>
+    <event name="mageos_seo_product_override_delete_after">
+        <observer name="mageos_aeo_invalidate_llms_jsonl_on_product_override_delete"
+                  instance="MageOS\Aeo\Observer\InvalidateLlmsJsonlCache"/>
+    </event>
+    <event name="mageos_seo_category_config_save_after">
+        <observer name="mageos_aeo_invalidate_llms_on_category_config_save"
                   instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
     </event>
-    <event name="config_data_delete_after">
-        <observer name="mageos_aeo_invalidate_llms_on_config_delete"
+    <event name="mageos_seo_category_config_delete_after">
+        <observer name="mageos_aeo_invalidate_llms_on_category_config_delete"
                   instance="MageOS\Aeo\Observer\InvalidateLlmsTxtCache"/>
+    </event>
+
+    <!--
+        Configuration, for both feed groups. Every way a value reaches the database saves its
+        backend model — the admin's configuration pages and `bin/magento config:set` — so this is
+        the one hook both share. The admin saves every field of a section, changed or not; only a
+        changed value, or a deleted one ("Use Default"), on a path a feed depends on counts
+        (Model\Feed\FeedConfigDependencies). A document's switch retires it at once, whichever
+        way it goes; a value a feed shows queues that feed's rebuild. Both wait for the commit.
+        Values config:set locks into app/etc/env.php (its lock-env option) never reach the
+        database, and so are not seen.
+    -->
+    <event name="config_data_save_after">
+        <observer name="mageos_aeo_refresh_feeds_on_config_save"
+                  instance="MageOS\Aeo\Observer\RefreshFeedsOnConfigChange"/>
+        <!-- robots.txt carries the AI crawler settings: every store view's is purged (review M5). -->
+        <observer name="mageos_aeo_purge_robots_txt_on_config_save"
+                  instance="MageOS\Aeo\Observer\PurgeRobotsTxtOnConfigChange"/>
+    </event>
+    <event name="config_data_delete_after">
+        <observer name="mageos_aeo_refresh_feeds_on_config_delete"
+                  instance="MageOS\Aeo\Observer\RefreshFeedsOnConfigChange"/>
+        <observer name="mageos_aeo_purge_robots_txt_on_config_delete"
+                  instance="MageOS\Aeo\Observer\PurgeRobotsTxtOnConfigChange"/>
     </event>
 
     <!--

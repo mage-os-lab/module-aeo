@@ -7,7 +7,6 @@ namespace MageOS\Aeo\Test\Unit\Model\Feed;
 use Magento\Catalog\Model\Category;
 use Magento\Catalog\Model\Product;
 use Magento\Cms\Model\Page;
-use Magento\Framework\App\Config\Value as ConfigValue;
 use Magento\Framework\DataObject;
 use Magento\Framework\Event;
 use Magento\Framework\Model\AbstractModel;
@@ -211,46 +210,6 @@ class LlmsInvalidationPolicyTest extends TestCase
         ));
     }
 
-    public function testConfigurationAffectsLlmsOnlyUnderThePathsItShowsAndWhenChanged(): void
-    {
-        $policy   = $this->policy([1]);
-        $relevant = fn (string $eventName, string $path, bool $changed): bool => $policy->isRelevantChange(
-            FeedRegenerator::GROUP_LLMS,
-            $this->event($eventName, $this->configValue($path, $changed))
-        );
-
-        foreach ([
-            'general/locale/code',
-            'trans_email/ident_support/email',
-            'mageos_aeo/llms_txt/faq_groups',
-            'mageos_aeo/llms_txt/policy_pages',
-            'web/unsecure/base_url',
-            'catalog/seo/category_url_suffix',
-            'mageos_seo_merchant/return/policy_url',
-            'mageos_seo_merchant/return/enabled',
-        ] as $path) {
-            $this->assertTrue($relevant('config_data_save_after', $path, true), $path);
-        }
-        $this->assertFalse(
-            $relevant('config_data_save_after', 'mageos_seo_merchant/shipping/enabled', true),
-            'Only the return policy appears in the documents.'
-        );
-        $this->assertFalse(
-            $relevant('config_data_save_after', 'mageos_seo_general/llms_txt/faq_groups', true),
-            'The llms settings moved to mageos_aeo; the old path is read by nothing.'
-        );
-        $this->assertFalse(
-            $relevant('config_data_save_after', 'general/locale/code', false),
-            'The admin saves every field of a section; an unchanged one is not a change.'
-        );
-        $this->assertFalse($relevant('config_data_save_after', 'contact/email/recipient_email', true));
-        $this->assertFalse($relevant('config_data_save_after', 'trans_email/ident_sales/email', true));
-        $this->assertTrue(
-            $relevant('config_data_delete_after', 'general/locale/code', false),
-            'A deleted value falls back to another: a change.'
-        );
-    }
-
     /**
      * Build the policy over the given store views; config defaults to a stub.
      *
@@ -315,35 +274,5 @@ class LlmsInvalidationPolicyTest extends TestCase
     private function event(string $name, object $entity): Event
     {
         return new Event(['name' => $name, 'data_object' => $entity]);
-    }
-
-    /**
-     * A configuration value at a path, reporting whether the save changed it.
-     *
-     * @param string $path
-     * @param bool $changed
-     * @return ConfigValue
-     */
-    private function configValue(string $path, bool $changed): ConfigValue
-    {
-        $value = new class ($changed) extends ConfigValue {
-            /**
-             * @param bool $changed
-             */
-            public function __construct(private readonly bool $changed)
-            {
-            }
-
-            /**
-             * @inheritdoc
-             */
-            public function isValueChanged()
-            {
-                return $this->changed;
-            }
-        };
-        $value->setData('path', $path);
-
-        return $value;
     }
 }

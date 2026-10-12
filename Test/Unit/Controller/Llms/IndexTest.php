@@ -9,7 +9,11 @@ use Magento\Framework\Controller\Result\RawFactory;
 use Magento\Store\Api\Data\StoreInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Controller\Llms\Index;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Config;
+use MageOS\Aeo\Model\Feed\FeedCache;
+use MageOS\Aeo\Model\Feed\FeedDelivery;
+use MageOS\Aeo\Model\Feed\FeedFile;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Seo\Model\Rebuild\RegenerationRequester;
 use MageOS\Seo\Model\Router\CanonicalPathRedirect;
@@ -47,6 +51,11 @@ class IndexTest extends TestCase
 
     private ?int $code = null;
 
+    /**
+     * @var FeedDelivery&MockObject
+     */
+    private FeedDelivery&MockObject $delivery;
+
     protected function setUp(): void
     {
         $this->result = $this->createStub(Raw::class);
@@ -60,6 +69,7 @@ class IndexTest extends TestCase
         });
         $this->storage   = $this->createStub(FeedStorage::class);
         $this->requester = $this->createMock(RegenerationRequester::class);
+        $this->delivery  = $this->createMock(FeedDelivery::class);
     }
 
     private function controller(): Index
@@ -78,14 +88,23 @@ class IndexTest extends TestCase
         $storeManager = $this->createStub(StoreManagerInterface::class);
         $storeManager->method('getStore')->willReturn($store);
 
-        return new Index($rawFactory, $config, $this->storage, $redirect, $this->requester, $storeManager);
+        return new Index(
+            $rawFactory,
+            $config,
+            $this->storage,
+            $redirect,
+            $this->requester,
+            $storeManager,
+            $this->delivery
+        );
     }
 
     public function testMissingFileQueuesRebuildAndAnswers404NotServerError(): void
     {
         // Lighthouse scores a 5xx llms.txt as a failure, a 4xx as not applicable.
-        $this->storage->method('read')->willReturn(null);
+        $this->storage->method('open')->willReturn(null);
         $this->requester->expects($this->once())->method('request');
+        $this->delivery->expects($this->never())->method('deliver');
 
         $this->controller()->execute();
 
@@ -94,14 +113,29 @@ class IndexTest extends TestCase
         $this->assertSame('no-store', $this->headers['Cache-Control'] ?? null);
     }
 
-    public function testStoredFileIsServedAsPlainText(): void
+    public function testUnusableStorageAnswers503AndQueuesNoRebuild(): void
     {
-        $this->storage->method('read')->willReturn("# Shop\n");
+        // Issue #7: a rebuild cannot bring a mount back.
+        $this->storage->method('open')->willThrowException(new FeedStorageUnavailableException(__('Not mounted')));
         $this->requester->expects($this->never())->method('request');
+        $this->delivery->expects($this->never())->method('deliver');
 
         $this->controller()->execute();
 
-        $this->assertSame(200, $this->code);
-        $this->assertSame('text/plain; charset=utf-8', $this->headers['Content-Type'] ?? null);
+        $this->assertSame(503, $this->code);
+        $this->assertSame('300', $this->headers['Retry-After'] ?? null);
+        $this->assertSame('no-store', $this->headers['Cache-Control'] ?? null);
+    }
+
+    public function testStoredFileIsServedAsPlainText(): void
+    {
+        $file = $this->createStub(FeedFile::class);
+        $this->storage->method('open')->willReturn($file);
+        $this->requester->expects($this->never())->method('request');
+        $this->delivery->expects($this->once())->method('deliver')
+            ->with($file, 'text/plain; charset=utf-8', FeedCache::TAG_LLMS)
+            ->willReturn($this->result);
+
+        $this->assertSame($this->result, $this->controller()->execute());
     }
 }

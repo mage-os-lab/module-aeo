@@ -51,7 +51,7 @@
         Public documents: MageOS_Seo's session check starts no session for these paths, so no
         cookie and no no-cache headers land on responses meant to be shared-cached.
     -->
-    <type name="MageOS\Seo\Model\Router\PublicPaths">
+    <type name="MageOS\Seo\Api\Router\PublicPathsInterface">
         <arguments>
             <argument name="paths" xsi:type="array">
                 <!-- The llms documents (Model\Router\LlmsTxtRouter) -->
@@ -71,7 +71,7 @@
         command and every setup run find it there. The pool is built for every save an observer
         inspects, so the handler takes its builder as a proxy.
     -->
-    <type name="MageOS\Seo\Model\Rebuild\HandlerPool">
+    <type name="MageOS\Seo\Api\Rebuild\HandlerPoolInterface">
         <arguments>
             <argument name="handlers" xsi:type="array">
                 <item name="llms" xsi:type="object">MageOS\Aeo\Model\Feed\LlmsRebuildHandler</item>
@@ -84,10 +84,31 @@
         </arguments>
     </type>
     <!-- Every storefront request for a feed reads storage; only a rebuild reports to the problem log. -->
-    <type name="MageOS\Aeo\Model\Feed\FeedStorage">
+    <type name="MageOS\Aeo\Model\Feed\LocalFeedFiles">
         <arguments>
-            <argument name="problemLog" xsi:type="object">MageOS\Seo\Model\Rebuild\ProblemLog\Proxy</argument>
+            <argument name="problemLog" xsi:type="object">MageOS\Seo\Api\Rebuild\ProblemLogInterface\Proxy</argument>
         </arguments>
+    </type>
+
+    <!--
+        With Magento's remote storage on, the feeds are kept in it. They go through the filesystem
+        core's sitemap is given — fullRemoteFilesystem, every directory remote — while the plain
+        Filesystem is remote for media and import/export only.
+    -->
+    <type name="MageOS\Aeo\Model\Feed\Remote\RemoteFeedFiles">
+        <arguments>
+            <argument name="filesystem" xsi:type="object">fullRemoteFilesystem</argument>
+            <argument name="problemLog" xsi:type="object">MageOS\Seo\Api\Rebuild\ProblemLogInterface\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="MageOS\Aeo\Model\Feed\Remote\DriverFeedReader">
+        <arguments>
+            <argument name="filesystem" xsi:type="object">fullRemoteFilesystem</argument>
+        </arguments>
+    </type>
+    <!-- bin/magento remote-storage:sync copies the feeds already on disk, after the media. -->
+    <type name="Magento\RemoteStorage\Model\Synchronizer">
+        <plugin name="mageos_aeo_copy_feeds" type="MageOS\Aeo\Plugin\RemoteStorage\CopyFeedsOnSynchronize"/>
     </type>
 
 </config>

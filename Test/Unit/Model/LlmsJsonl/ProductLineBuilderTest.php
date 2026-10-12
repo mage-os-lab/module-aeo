@@ -5,22 +5,28 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Test\Unit\Model\LlmsJsonl;
 
 use Magento\Catalog\Model\Product;
+use Magento\Catalog\Model\Product\Type\AbstractType;
+use Magento\Framework\Pricing\Amount\AmountInterface;
 use Magento\Framework\Pricing\Price\PriceInterface;
 use Magento\Framework\Pricing\PriceInfoInterface;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
 use MageOS\Aeo\Model\LlmsJsonl\ProductLineBuilder;
+use MageOS\Seo\Api\Product\OfferSummaryInterface;
+use MageOS\Seo\Api\Product\VariantImageInterface;
+use MageOS\Seo\Model\Config;
+use MageOS\Seo\Model\Price\SchemaPrice;
+use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Product\FinalPrice;
-use MageOS\Seo\Service\CurrencyService;
-use MageOS\Seo\Test\Unit\Service\CurrencyServices;
+use MageOS\Seo\Test\Unit\Model\Price\SchemaPrices;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 class ProductLineBuilderTest extends TestCase
 {
-    use CurrencyServices;
+    use SchemaPrices;
 
     /**
      * @var Product&Stub
@@ -34,8 +40,11 @@ class ProductLineBuilderTest extends TestCase
 
     protected function setUp(): void
     {
+        $displayed = $this->createStub(AmountInterface::class);
+        $displayed->method('getValue')->willReturn(29.99);
         $finalPrice = $this->createStub(PriceInterface::class);
         $finalPrice->method('getValue')->willReturn(29.99);
+        $finalPrice->method('getAmount')->willReturn($displayed);
         $priceInfo = $this->createMock(PriceInfoInterface::class);
         $priceInfo->method('getPrice')->with('final_price')->willReturn($finalPrice);
 
@@ -44,28 +53,50 @@ class ProductLineBuilderTest extends TestCase
         $this->product->method('getName')->willReturn('Blue Mug');
         $this->product->method('getSku')->willReturn('MUG-001');
         $this->product->method('getProductUrl')->willReturn('https://example.com/blue-mug.html');
+        $this->product->method('getTypeInstance')->willReturn($this->simpleType());
 
         $this->builder = $this->builder();
     }
 
     /**
-     * The line builder over the given store and currency service, or a stub store and a real
-     * CurrencyService in GBP.
+     * The line builder over the given store and schema price, or a stub store and a real
+     * SchemaPrice in GBP. Composite products are ProductLineBuilderOfferTest's.
      *
      * @param Store|null $store
-     * @param CurrencyService|null $currencyService
+     * @param SchemaPrice|null $schemaPrice
+     * @param string|null $image The image MageOS_Seo's VariantImageInterface gives, none by default
      * @return ProductLineBuilder
      */
-    private function builder(?Store $store = null, ?CurrencyService $currencyService = null): ProductLineBuilder
-    {
+    private function builder(
+        ?Store $store = null,
+        ?SchemaPrice $schemaPrice = null,
+        ?string $image = null
+    ): ProductLineBuilder {
         $storeManager = $this->createStub(StoreManagerInterface::class);
         $storeManager->method('getStore')->willReturn($store ?? $this->createStub(Store::class));
+        $variantImage = $this->createStub(VariantImageInterface::class);
+        $variantImage->method('forProduct')->willReturn($image);
 
         return new ProductLineBuilder(
             $storeManager,
-            $currencyService ?? $this->currencyService(),
-            new FinalPrice($this->createStub(LoggerInterface::class))
+            $schemaPrice ?? $this->schemaPrice(),
+            new FinalPrice($this->createStub(LoggerInterface::class), $this->createStub(Config::class)),
+            $this->createStub(OfferSummaryInterface::class),
+            $variantImage
         );
+    }
+
+    /**
+     * A product type that is not composite: a simple product's.
+     *
+     * @return AbstractType
+     */
+    private function simpleType(): AbstractType
+    {
+        $type = $this->createStub(AbstractType::class);
+        $type->method('isComposite')->willReturn(false);
+
+        return $type;
     }
 
     /**
@@ -78,8 +109,9 @@ class ProductLineBuilderTest extends TestCase
         $product = $this->createStub(Product::class);
         $product->method('getPriceInfo')->willThrowException(new \RuntimeException('No price index'));
         $product->method('getProductUrl')->willReturn('https://example.com/blue-mug.html');
+        $product->method('getTypeInstance')->willReturn($this->simpleType());
 
-        $offer = $this->builder->build($product, false)['offers'];
+        $offer = $this->builder->build($product, AvailabilityResolver::OUT_OF_STOCK)['offers'];
 
         $this->assertSame(
             [
@@ -93,7 +125,7 @@ class ProductLineBuilderTest extends TestCase
 
     public function testBuildsRequiredFields(): void
     {
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
 
         $this->assertSame('https://schema.org', $node['@context']);
         $this->assertSame('Product', $node['@type']);
@@ -110,17 +142,24 @@ class ProductLineBuilderTest extends TestCase
     {
         // PriceInfo amounts are already in the display currency; a base→display rate
         // of 2 must not be applied to them again.
-        $node = $this->builder(currencyService: $this->currencyService('GBP', 2.0))->build($this->product, true);
+        $node = $this->builder(schemaPrice: $this->schemaPrice('GBP', 2.0))
+            ->build($this->product, AvailabilityResolver::IN_STOCK);
 
         $this->assertSame('29.99', $node['offers']['price']);
     }
 
-    public function testOutOfStockAvailability(): void
+    public function testTheAvailabilityGivenIsTheOffersAvailability(): void
     {
-        // Salability is supplied by the caller (batch-resolved via MSI in
-        // JsonlBuilder), never derived from the product itself.
-        $node = $this->builder->build($this->product, false);
-        $this->assertSame('https://schema.org/OutOfStock', $node['offers']['availability']);
+        // Availability is supplied by the caller (resolved a page at a time in JsonlBuilder),
+        // never derived from the product itself; issue #30: a line can say BackOrder.
+        foreach ([
+            AvailabilityResolver::IN_STOCK,
+            AvailabilityResolver::BACKORDER,
+            AvailabilityResolver::OUT_OF_STOCK,
+        ] as $availability) {
+            $node = $this->builder->build($this->product, $availability);
+            $this->assertSame($availability, $node['offers']['availability']);
+        }
     }
 
     public function testLongDescriptionIsCutAtAWordBoundaryOnOneLine(): void
@@ -130,7 +169,7 @@ class ProductLineBuilderTest extends TestCase
             fn (string $m) => $m === 'getShortDescription' ? $long : null
         );
 
-        $description = $this->builder->build($this->product, true)['description'];
+        $description = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK)['description'];
 
         $this->assertStringStartsWith('Hand thrown stoneware glazed mug', $description);
         $this->assertStringEndsWith('…', $description);
@@ -144,25 +183,28 @@ class ProductLineBuilderTest extends TestCase
         $this->product->method('__call')->willReturnCallback(
             fn (string $m) => $m === 'getShortDescription' ? '<p>A <strong>great</strong> mug</p>' : null
         );
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertSame('A great mug', $node['description']);
     }
 
     public function testImageBuiltFromMediaUrl(): void
     {
-        $this->product->method('getImage')->willReturn('/m/u/mug.jpg');
         $store = $this->createMock(Store::class);
         $store->method('getBaseUrl')->with(UrlInterface::URL_TYPE_MEDIA)
             ->willReturn('https://example.com/media/');
 
-        $node = $this->builder($store)->build($this->product, true);
+        $node = $this->builder($store, image: '/m/u/mug.jpg')->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertSame('https://example.com/media/catalog/product/m/u/mug.jpg', $node['image']);
     }
 
-    public function testImageOmittedWhenNoSelection(): void
+    /**
+     * No image of its own, and for a configurable, none from a sold variant either.
+     *
+     * @return void
+     */
+    public function testImageOmittedWhenThereIsNone(): void
     {
-        $this->product->method('getImage')->willReturn('no_selection');
-        $node = $this->builder->build($this->product, true);
+        $node = $this->builder->build($this->product, AvailabilityResolver::IN_STOCK);
         $this->assertArrayNotHasKey('image', $node);
     }
 }

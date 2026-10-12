@@ -7,6 +7,7 @@ namespace MageOS\Aeo\Test\Integration\Model\Feed;
 use Magento\Framework\Event\ManagerInterface;
 use Magento\Framework\FlagManager;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\OrganizationRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -25,6 +26,8 @@ use PHPUnit\Framework\TestCase;
  */
 class LlmsSourceChangeInvalidationTest extends TestCase
 {
+    use CommitsDeferredRequests;
+
     private const LLMS_PENDING = 'mageos_seo_feed_pending_llms';
 
     /**
@@ -82,10 +85,14 @@ class LlmsSourceChangeInvalidationTest extends TestCase
      */
     private function assertQueuedBy(callable $change): void
     {
+        // Requests made inside the test's transaction wait for a commit that never comes: its
+        // setup's are run and cleared first, so only the change's own count.
+        $this->commitDeferredRequests();
         $flags = Bootstrap::getObjectManager()->get(FlagManager::class);
         $flags->deleteFlag(self::LLMS_PENDING);
 
         $change();
+        $this->commitDeferredRequests();
 
         $this->assertNotNull($flags->getFlagData(self::LLMS_PENDING), 'No rebuild of the llms documents was queued.');
     }

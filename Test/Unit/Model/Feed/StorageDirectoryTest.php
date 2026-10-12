@@ -8,6 +8,7 @@ use Magento\Framework\App\DeploymentConfig;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Filesystem\Driver\File as FileDriver;
+use MageOS\Aeo\Exception\FeedStorageUnavailableException;
 use MageOS\Aeo\Model\Feed\StorageDirectory;
 use PHPUnit\Framework\TestCase;
 
@@ -105,6 +106,98 @@ class StorageDirectoryTest extends TestCase
             $this->storageDirectory()->isAllowed($this->root . '/var/escape'),
             'A link inside var/ must not stand for a target outside it.'
         );
+    }
+
+    public function testVarItselfIsRefused(): void
+    {
+        // Issue #6: var/ holds everything else's files too, and cleanup works by directory name.
+        $this->assertFalse($this->storageDirectory()->isAllowed($this->root . '/var'));
+    }
+
+    public function testADirectoryThisHostCanOnlyReadIsAllowed(): void
+    {
+        // Issue #7: a web host reads the shared directory the cron host writes. Saving the setting
+        // there must work too.
+        mkdir($this->root . '/var/shared-read-only');
+        chmod($this->root . '/var/shared-read-only', 0o550);
+
+        $this->assertTrue($this->storageDirectory()->isAllowed($this->root . '/var/shared-read-only'));
+        $this->storageDirectory()->validate($this->root . '/var/shared-read-only');
+
+        chmod($this->root . '/var/shared-read-only', 0o750);
+    }
+
+    public function testAVisibleAliasOfAHiddenDirectoryIsRefused(): void
+    {
+        // Issue #2: hidden directories were looked for in the path as typed only, so a link with a
+        // visible name was accepted for var/.hidden.
+        symlink($this->root . '/var/.hidden', $this->root . '/var/visible');
+
+        $this->assertFalse($this->storageDirectory()->isAllowed($this->root . '/var/visible'));
+    }
+
+    public function testADirectoryEveryUserCanWriteToIsRefused(): void
+    {
+        // Issue #2: whoever can write to the storage directory can put a link in it.
+        mkdir($this->root . '/var/open');
+        chmod($this->root . '/var/open', 0o777);
+
+        $this->assertFalse($this->storageDirectory()->isAllowed($this->root . '/var/open'));
+    }
+
+    public function testAGroupWritableOrWorldReadableDirectoryIsAllowed(): void
+    {
+        // The web server and the cron or queue user may differ and share a group; 0755 is the
+        // commonest mode of all, and only writing is refused.
+        foreach (['shared' => 0o770, 'readable' => 0o755] as $name => $mode) {
+            mkdir($this->root . '/var/' . $name);
+            chmod($this->root . '/var/' . $name, $mode);
+
+            $this->assertTrue($this->storageDirectory()->isAllowed($this->root . '/var/' . $name), $name);
+        }
+    }
+
+    public function testThePermittedDirectoryIsGivenResolved(): void
+    {
+        // Storage works on the resolved path, so a link swapped after the check cannot move it.
+        symlink($this->root . '/var/mageos_aeo', $this->root . '/var/alias');
+
+        $read = StorageDirectory::READ;
+        $this->assertSame(
+            $this->root . '/var/mageos_aeo',
+            $this->storageDirectory()->locate(' ' . $this->root . '/var/alias ', $read)
+        );
+        $this->assertNull($this->storageDirectory()->locate($this->root . '/pub', $read), 'a refused one');
+        $this->assertNull($this->storageDirectory()->locate('', $read), 'the default, which has no path of its own');
+    }
+
+    public function testADirectoryMissingOnThisHostIsReportedNotRefused(): void
+    {
+        // Issue #7: a mount that is not there is the server's fault, not the setting's, and must
+        // not send this host's feeds to its own var/.
+        $this->expectException(FeedStorageUnavailableException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $this->storageDirectory()->locate($this->outside . '/not-mounted', StorageDirectory::READ);
+    }
+
+    public function testADirectoryThisHostCanOnlyReadIsReportedForWriting(): void
+    {
+        mkdir($this->root . '/var/read-only');
+        chmod($this->root . '/var/read-only', 0o550);
+
+        try {
+            $this->assertSame(
+                $this->root . '/var/read-only',
+                $this->storageDirectory()->locate($this->root . '/var/read-only', StorageDirectory::READ),
+                'It is served from.'
+            );
+            $this->expectException(FeedStorageUnavailableException::class);
+            $this->expectExceptionMessage('cannot be written');
+            $this->storageDirectory()->locate($this->root . '/var/read-only', StorageDirectory::WRITE);
+        } finally {
+            chmod($this->root . '/var/read-only', 0o750);
+        }
     }
 
     public function testADirectoryOutsideTheInstallationIsRefusedUnlessDeclared(): void

@@ -17,7 +17,7 @@ use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\LlmsJsonl\JsonlBuilder;
-use MageOS\Aeo\Model\ResourceModel\StockIndexSalability;
+use MageOS\Seo\Model\Product\AvailabilityResolver;
 use MageOS\Seo\Model\Rebuild\ProblemFormatter;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use MageOS\Seo\Model\Rebuild\RetrySchedule;
@@ -86,8 +86,9 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * When the stock lookup fails, every product of the batch is written as out of stock: the file
-     * is served, and the admin is told it is incomplete until a rebuild gets through.
+     * When the stock lookup fails, every product of the batch is written without its availability
+     * (decision D8a: not as out of stock, which nothing backs): the file is served, and the admin is
+     * told it is incomplete until a rebuild gets through.
      *
      * @return void
      */
@@ -95,18 +96,24 @@ class RebuildProblemsTest extends TestCase
     #[DataFixture(ProductFixture::class, as: 'product')]
     public function testAFailedStockLookupShowsLlmsJsonlAsIncompleteUntilACleanRebuild(): void
     {
-        $failing = $this->createStub(StockIndexSalability::class);
-        $failing->method('salable')->willThrowException(new \RuntimeException('Inventory is down'));
+        $failing = $this->createStub(AvailabilityResolver::class);
+        $failing->method('resolveMany')->willThrowException(new \RuntimeException('Inventory is down'));
 
         $this->regeneratorWith($failing)->regenerate(FeedRegenerator::GROUP_JSONL);
 
         // The lookup only runs for a page with products in it: the fixture must have been listed,
         // whatever else the database holds.
-        $sku = (string) DataFixtureStorageManager::getStorage()->get('product')->getSku();
-        $this->assertStringContainsString(
-            '"sku":"' . $sku . '"',
-            (string) Bootstrap::getObjectManager()->get(FeedStorage::class)->read('llms.jsonl', $this->storeId())
-        );
+        $sku    = (string) DataFixtureStorageManager::getStorage()->get('product')->getSku();
+        $listed = null;
+        $feed   = (string) Bootstrap::getObjectManager()->get(FeedStorage::class)->read('llms.jsonl', $this->storeId());
+        foreach (explode("\n", $feed) as $each) {
+            $node = json_decode($each, true);
+            if (\is_array($node) && ($node['sku'] ?? null) === $sku) {
+                $listed = $node;
+            }
+        }
+        $this->assertNotNull($listed, 'The product is listed.');
+        $this->assertArrayNotHasKey('availability', $listed['offers'], 'An availability nothing backs is left out.');
 
         $problems = $this->problemLog()->all();
         $this->assertSame(ProblemLog::KIND_DEGRADED, $problems['jsonl'][$this->storeId()]['kind'] ?? null);
@@ -116,7 +123,7 @@ class RebuildProblemsTest extends TestCase
         $this->assertStringStartsWith('llms.jsonl for store "Default Store View" is incomplete (since ', $line);
         $this->assertStringContainsString('It will be retried automatically at ', $line);
         $this->assertStringEndsWith(
-            'Reason: The stock lookup failed, so some products are listed as out of stock.',
+            'Reason: The stock lookup failed, so some products are listed without their availability.',
             $line
         );
 
@@ -127,19 +134,19 @@ class RebuildProblemsTest extends TestCase
     }
 
     /**
-     * A regenerator whose llms.jsonl builder reads salability from the given lookup.
+     * A regenerator whose llms.jsonl builder reads availability from the given resolver.
      *
      * Builder and regenerator share the test's problem log: a degradation is only recorded inside
      * the rebuild the same log has open.
      *
-     * @param StockIndexSalability $salability
+     * @param AvailabilityResolver $availability
      * @return FeedRegenerator
      */
-    private function regeneratorWith(StockIndexSalability $salability): FeedRegenerator
+    private function regeneratorWith(AvailabilityResolver $availability): FeedRegenerator
     {
         $objectManager = Bootstrap::getObjectManager();
         $jsonlBuilder  = $objectManager->create(JsonlBuilder::class, [
-            'stockIndexSalability' => $salability,
+            'availabilityResolver' => $availability,
             'problemLog'           => $this->problemLog(),
         ]);
 

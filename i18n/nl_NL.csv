@@ -7,7 +7,10 @@
 "The feed storage directory must not contain "".."".","De opslagmap voor feeds mag geen "".."" bevatten."
 "The feed storage directory must not contain hidden directories.","De opslagmap voor feeds mag geen verborgen mappen bevatten."
 "The feed storage directory does not exist: %1","De opslagmap voor feeds bestaat niet: %1"
-"The feed storage directory is not a writable directory: %1","De opslagmap voor feeds is geen beschrijfbare map: %1"
+"The feed storage directory is not a directory: %1","De opslagmap voor feeds is geen map: %1"
+"The feed storage directory cannot be written to from here: %1","Vanaf hier kan niet in de opslagmap voor feeds worden geschreven: %1"
+"The feed storage directory cannot be read from here: %1","De opslagmap voor feeds kan vanaf hier niet worden gelezen: %1"
+"var/ itself cannot be the feed storage directory, as it holds other files too. Use a directory inside it, such as var/mageos_aeo, or leave the setting empty.","var/ zelf kan niet de opslagmap voor feeds zijn, want er staan ook andere bestanden in. Gebruik een map daarbinnen, zoals var/mageos_aeo, of laat de instelling leeg."
 "Inside the installation only var/ may be used. To store feeds elsewhere, add the directory to ""%1"" in app/etc/env.php.","Binnen de installatie mag alleen var/ worden gebruikt. Wil je feeds ergens anders opslaan, voeg de map dan toe aan ""%1"" in app/etc/env.php."
 "The feed storage directory must be inside var/, or a directory listed under ""%1"" in app/etc/env.php.","De opslagmap voor feeds moet in var/ liggen, of een map zijn die onder ""%1"" in app/etc/env.php staat."
 "Frequently asked questions:","Veelgestelde vragen:"
@@ -43,9 +46,11 @@ line) at /llms.jsonl. Off by default.","Bied op /llms.jsonl een machineleesbare 
 "Feed Storage",Feedopslag
 "Storage Directory",Opslagmap
 "Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl). Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan."
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>.","Absoluut pad voor vooraf gegenereerde feedbestanden (llms.txt, llms-full.txt, llms.jsonl), voor niets anders gebruikt. Laat leeg om var/mageos_aeo te gebruiken. Binnen de installatie mag alleen een map binnen var/ worden gebruikt; een gedeelde mount voor omgevingen met meerdere servers moet onder <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php staan. Met de externe opslag van Magento aan worden de feeds daar bewaard, en wordt dit pad vanaf de hoofdmap ervan genomen: leeg is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>."
 "AI Crawler robots.txt Directives","robots.txt-instructies voor AI-crawlers"
 "Append AI Crawler Directives","AI-crawlerinstructies toevoegen"
 "Add a ""Disallow: /"" robots.txt group for each AI crawler selected below.
@@ -55,7 +60,7 @@ Crawlers not selected keep following your standard ""User-agent: *"" rules.","Vo
 "llms.txt and llms-full.txt","llms.txt en llms-full.txt"
 "llms.jsonl","llms.jsonl"
 "Feed %1","Feed %1"
-"The stock lookup failed, so some products are listed as out of stock.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld als niet op voorraad."
+"The stock lookup failed, so some products are listed without their availability.","Het opvragen van de voorraad is mislukt, dus sommige producten staan vermeld zonder hun beschikbaarheid."
 "The configured storage directory is not allowed, so the files are kept in var/mageos_aeo instead.","De ingestelde opslagmap is niet toegestaan, dus de bestanden staan in plaats daarvan in var/mageos_aeo."
 Categories,Categorieën
 Policies,Beleid
@@ -64,3 +69,25 @@ Policies,Beleid
 "CMS pages listed under Policies in /llms.txt and /llms-full.txt, after the Returns
 Policy URL (SEO Merchant Policies): privacy, terms, shipping, about us. Each is listed by its title, with
 its meta description. A page not available in this store view is left out.","CMS-pagina's die onder Beleid in /llms.txt en /llms-full.txt staan, na de URL retourbeleid (SEO-verkoopbeleid): privacy, voorwaarden, verzending, over ons. Elke pagina staat er met haar titel en metabeschrijving. Een pagina die niet beschikbaar is in deze winkelweergave, wordt weggelaten."
+"Leave Out NOINDEX Pages","NOINDEX-pagina's weglaten"
+"Yes: a product or category whose page is NOINDEX, which keeps it out of search engines, is left out of /llms.txt, /llms-full.txt and /llms.jsonl too. A NOINDEX category's subcategories that are not NOINDEX take its place. Pages chosen above under Pages Listed in llms.txt are listed either way. No: the documents list them all.","Ja: een product of categorie waarvan de pagina NOINDEX is, en daardoor buiten zoekmachines blijft, wordt ook weggelaten uit /llms.txt, /llms-full.txt en /llms.jsonl. Subcategorieën van een NOINDEX-categorie die zelf niet NOINDEX zijn, nemen haar plaats in. Pagina's die hierboven bij Pagina's in llms.txt zijn gekozen, staan er hoe dan ook in. Nee: de documenten vermelden ze allemaal."
+"The feed storage directory can be written to by every user: %1. Allow only the users that run Magento.","Elke gebruiker kan schrijven in de opslagmap voor feeds: %1. Sta alleen de gebruikers toe waaronder Magento draait."
+"Feed storage does not follow symbolic links, and ""%1"" is one.","De feedopslag volgt geen symbolische koppelingen, en ""%1"" is er een."
+"The feed storage directory ""%1"" does not exist.","De opslagmap voor feeds ""%1"" bestaat niet."
+"The feed storage directory ""%1"" can be written to by every user. Allow only the users that run Magento.","Elke gebruiker kan schrijven in de opslagmap voor feeds ""%1"". Sta alleen de gebruikers toe waaronder Magento draait."
+"The directory ""%1"" could not be created.","De map ""%1"" kon niet worden aangemaakt."
+"The file ""%1"" could not be created.","Het bestand ""%1"" kon niet worden aangemaakt."
+"The file ""%1"" was replaced while it was being created.","Het bestand ""%1"" werd vervangen terwijl het werd aangemaakt."
+"A feed file could not be written.","Een feedbestand kon niet worden geschreven."
+"The file ""%1"" could not be put in place.","Het bestand ""%1"" kon niet op zijn plaats worden gezet."
+"The file ""%1"" could not be deleted.","Het bestand ""%1"" kon niet worden verwijderd."
+"The directory ""%1"" could not be deleted.","De map ""%1"" kon niet worden verwijderd."
+"The var/ directory could not be resolved.","De map var/ kon niet worden herleid."
+"Remote storage could not be read: %1","De externe opslag kon niet worden gelezen: %1"
+"A feed read from remote storage could not be buffered.","Een uit de externe opslag gelezen feed kon niet worden gebufferd."
+"Could not copy %1 of store view %2 to remote storage: %3","%1 van winkelweergave %2 kon niet naar de externe opslag worden gekopieerd: %3"
+"Remote storage could not write a feed file: %1","De externe opslag kon een feedbestand niet schrijven: %1"
+"The configured storage directory cannot be a path in remote storage, so the files are kept in %1 instead.","De ingestelde opslagmap kan geen pad in de externe opslag zijn, dus worden de bestanden in plaats daarvan in %1 bewaard."
+"The storage directory ""%1"" has an empty part: separate its parts with single slashes.","De opslagmap ""%1"" heeft een leeg deel: scheid de delen met enkele schuine strepen."
+"The storage directory ""%1"" is a path in remote storage: use letters, digits, ""."", ""_"" and ""-"", starting each part with a letter or digit.","De opslagmap ""%1"" is een pad in de externe opslag: gebruik letters, cijfers, ""."", ""_"" en ""-"", en begin elk deel met een letter of cijfer."
+"Remote storage names no bucket or region, so the feeds cannot be read from it.","De externe opslag noemt geen bucket of regio, dus kunnen de feeds er niet uit worden gelezen."

@@ -49,6 +49,12 @@ its meta description. A page not available in this store view is left out.</comm
                     <source_model>Magento\Cms\Model\Config\Source\Page</source_model>
                     <can_be_empty>1</can_be_empty>
                 </field>
+                <field id="exclude_noindex" translate="label comment" type="select"
+                       sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Leave Out NOINDEX Pages</label>
+                    <comment>Yes: a product or category whose page is NOINDEX, which keeps it out of search engines, is left out of /llms.txt, /llms-full.txt and /llms.jsonl too. A NOINDEX category's subcategories that are not NOINDEX take its place. Pages chosen above under Pages Listed in llms.txt are listed either way. No: the documents list them all.</comment>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
             </group>
 
             <group id="feeds" translate="label" type="text" sortOrder="20"
@@ -59,9 +65,11 @@ its meta description. A page not available in this store view is left out.</comm
                     <label>Storage Directory</label>
                     <backend_model>MageOS\Aeo\Model\Config\Backend\FeedStorageDir</backend_model>
                     <comment><![CDATA[Absolute path for pre-generated feed files (llms.txt, llms-full.txt,
-llms.jsonl). Leave empty to use var/mageos_aeo. Inside the installation only var/ may be used;
-a shared mount for multi-server deployments must be listed under
-<code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.]]></comment>
+llms.jsonl), used for nothing else. Leave empty to use var/mageos_aeo. Inside the installation
+only a directory inside var/ may be used; a shared mount for multi-server deployments must be
+listed under <code>mageos_aeo/feed_storage_roots</code> in app/etc/env.php.
+With Magento's remote storage on, the feeds are kept there instead, and this path is taken from its
+root: empty is <code>mageos_aeo/</code>, <code>/mnt/shared/feeds</code> is <code>mnt/shared/feeds/</code>.]]></comment>
                 </field>
             </group>
 

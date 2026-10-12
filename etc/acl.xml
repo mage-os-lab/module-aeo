@@ -4,10 +4,18 @@
     <acl>
         <resources>
             <resource id="Magento_Backend::admin">
-                <!-- Under MageOS_Seo's SEO resource, beside its own configuration resource. -->
-                <resource id="MageOS_Seo::seo">
-                    <resource id="MageOS_Aeo::config" title="AI Information &amp; Crawlers Configuration"
-                              translate="title" sortOrder="30"/>
+                <!--
+                    With every other configuration section's, under Stores → Settings → Configuration,
+                    where MageOS_Seo's own configuration resource also sits. The resource ID is
+                    unchanged, so roles keep their grants.
+                -->
+                <resource id="Magento_Backend::stores">
+                    <resource id="Magento_Backend::stores_settings">
+                        <resource id="Magento_Config::config">
+                            <resource id="MageOS_Aeo::config" title="AI Information &amp; Crawlers Configuration"
+                                      translate="title" sortOrder="210"/>
+                        </resource>
+                    </resource>
                 </resource>
             </resource>
         </resources>

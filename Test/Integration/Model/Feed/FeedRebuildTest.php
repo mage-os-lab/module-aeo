@@ -15,6 +15,7 @@ use Magento\TestFramework\Fixture\DataFixtureStorageManager;
 use Magento\TestFramework\Helper\Bootstrap;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
+use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
 use MageOS\Seo\Model\Rebuild\RegenerateConsumer;
 use MageOS\Seo\Model\Rebuild\RegenerationRequester;
 use PHPUnit\Framework\TestCase;
@@ -30,6 +31,8 @@ use PHPUnit\Framework\TestCase;
  */
 class FeedRebuildTest extends TestCase
 {
+    use CommitsDeferredRequests;
+
     private const FLAG_LLMS = 'mageos_seo_feed_pending_llms';
 
     /**
@@ -131,6 +134,9 @@ class FeedRebuildTest extends TestCase
 
     private function flags()
     {
+        // Requests made inside the test's transaction wait for a commit that never comes.
+        $this->commitDeferredRequests();
+
         return Bootstrap::getObjectManager()->create(FlagManager::class);
     }
 

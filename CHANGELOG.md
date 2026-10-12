@@ -12,6 +12,200 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+### Added
+
+- **Leave Out NOINDEX Pages** (AI Discoverability, default Yes, per store view; review M4,
+  decisions D2a and D3a). A product or category whose page is NOINDEX, which keeps it out of
+  search engines, was listed in the llms documents all the same. It is now left out of /llms.txt,
+  /llms-full.txt and /llms.jsonl.
+  - The directive is the one the page gets: MageOS_Seo's setting for it, inherited along a
+    category's path, else core's Design → Search Engine Robots
+    (`MageOS\Seo\Api\Robots\PageDirectivesInterface`, which the XML sitemap reads too).
+  - A NOINDEX category's subcategories that are not NOINDEX move up under its nearest listed
+    ancestor, rather than going with it.
+  - Pages chosen under **Pages Listed in llms.txt** are listed either way.
+  - Changing a product's or category's robots setting, the Product Pages or Category Pages
+    default, or core's Default Robots, queues the documents that list it.
+  - Set it to No to list every page, as before.
+- **The feeds are kept in Magento's remote storage while it is on.** They stayed on the local disk
+  of the host running the rebuilds, so on an S3 installation with several web servers and no shared
+  mount, the others had none to serve. See `docs/feeds.md`, "In Magento's remote storage (S3)".
+  - The storage directory setting is taken from the remote storage's root: empty is
+    `mageos_aeo/`, `/mnt/shared/feeds` is `mnt/shared/feeds/`. While remote storage is on, it is
+    checked as a path in it when saved.
+  - Written through Magento's remote filesystem, to a temporary object moved over the served one.
+  - Served as a stream at any size, with a read client of the module's own configured from
+    `remote_storage` as Magento's S3 driver is, since that driver reads an object whole into memory.
+  - `bin/magento remote-storage:sync` copies the feeds already on disk, after the media.
+- **Requires `magento/module-remote-storage`, `magento/module-aws-s3`, `aws/aws-sdk-php` and
+  `guzzlehttp/psr7`,** part of every Magento and Mage-OS installation.
+- **Classes:** `Model\Feed\FeedStorage` now hands each operation to `Model\Feed\LocalFeedFiles` (the
+  local storage, moved unchanged) or `Model\Feed\Remote\RemoteFeedFiles`, and takes those two;
+  `openForWrite()` returns `Model\Feed\FeedWriterInterface`. New: `Model\Feed\FeedFilesInterface`,
+  `Model\Feed\StorageLog`, `Model\Feed\Remote\*`, `Plugin\RemoteStorage\CopyFeedsOnSynchronize`.
+  `Model\Config\Backend\FeedStorageDir` takes the remote storage configuration and
+  `Remote\RemoteStoragePath`. None is `@api`.
+
+### Security
+
+- **Feed storage no longer follows symbolic links**
+  ([#2](https://github.com/mage-os-lab/module-aeo/issues/2)). A link in a storage directory could
+  take a read, a write or a deletion outside it: a linked feed file was served, a linked store
+  directory took the write, and removing an orphaned store directory that was a link emptied its
+  target.
+  - Each operation resolves the storage directory once and works from that path.
+  - The storage directory, each `store_<id>/` directory and each feed file must be the real thing.
+    A link is refused, or removed itself, never followed, and a store directory is emptied file by
+    file, never recursively.
+  - **`var/mageos_aeo` as a link is refused too**; set the Storage Directory instead.
+  - The configured Storage Directory is checked for hidden directories as resolved as well as as
+    typed, so a link with a visible name can no longer stand for `var/.hidden`.
+  - A storage directory every user can write to is refused. Group-writable is fine.
+  - What remains: PHP has no `openat()`, so a process able to rename entries in a storage
+    directory could still race an operation. Keep the directories writable only by the users that
+    run Magento ([docs/feeds.md](docs/feeds.md#symbolic-links-are-not-followed)).
+
+### Fixed
+
+- **A large feed no longer exhausts PHP's memory**
+  ([#3](https://github.com/mage-os-lab/module-aeo/issues/3)). Serving a feed read the whole file
+  into a string, so one larger than `memory_limit` ended the request with a fatal error. A feed
+  over 0.5 MiB is now sent from its file, 4 KiB at a time. Smaller ones are answered from memory as
+  before, so the built-in full page cache still stores them; it does not store a streamed one.
+  Checked with `memory_limit` at 64M: a 200 MiB feed was served whole, each request peaking at
+  16–26 MB.
+- **Configuration changes reach both feeds, once committed**
+  ([#4](https://github.com/mage-os-lab/module-aeo/issues/4)).
+  - Switching a document on or off — at any scope, or with "Use Default" — removes its files for
+    the store views under that scope, purges its cached responses and queues its rebuild.
+    Switched off, no file or cached response serves the old document; switched on, the file from
+    before is not served as current. Before, nothing happened until a rebuild, and none was queued
+    once no store view had the feed enabled, which is the state a switch-off leaves.
+  - Saving Enable /llms.jsonl queued the llms rebuild instead of llms.jsonl's. The settings
+    llms.jsonl shows now queue its rebuild: `currency/`, the price scope, Display Out of Stock
+    Products, `web/` and `catalog/seo/`. They queued none.
+  - The work waits for the commit and reads no configuration: during a save the configuration in
+    memory is still the old one, so asking whether a feed was enabled gave the old answer.
+
+- **A web server that can only read the shared feed directory serves it**
+  ([#7](https://github.com/mage-os-lab/module-aeo/issues/7)). The storage directory had to be
+  writable even for a request, so a read-only mount was refused, the request looked in `var/` and
+  found nothing, and every request logged an error.
+  - The directory now has to be readable where feeds are served and writable where they are built.
+  - **One this server cannot use** — a missing mount, say — no longer falls back to `var/`. A
+    request answers `503` without queueing a rebuild (a rebuild cannot fix a mount), a rebuild
+    fails and says why in the admin, and the error is logged at most once every 5 minutes.
+  - A location the rules refuse still falls back to `var/mageos_aeo`, as before.
+  - Saving the setting needs the directory readable, not writable, so it can be saved on a web
+    server that only reads it.
+- **Cleanup keeps what the feeds did not write**
+  ([#6](https://github.com/mage-os-lab/module-aeo/issues/6)). Removing a store's feed directory —
+  on store deletion, and for store views that no longer exist — deleted everything in it, so a
+  directory shared with other files lost them.
+  - It now removes only the feed files (`llms.txt`, `llms-full.txt`, `llms.jsonl`, their temporary
+    files, the retired `hreflang-sitemap*.xml`), and the directory only once nothing else is left,
+    with a notice in the log when it stays.
+  - `var/` itself is refused as the storage directory; a directory inside it is fine.
+- **Rebuilds wait for the commit, and use current data**
+  ([#8](https://github.com/mage-os-lab/module-aeo/issues/8),
+  [#9](https://github.com/mage-os-lab/module-aeo/issues/9)). Fixed in MageOS_Seo 1.2.2, whose
+  rebuild queue these documents use.
+  - A save's rebuild is queued once the save commits, so an AMQP consumer can no longer build from
+    the data before it.
+  - A long-running consumer resets the Organization, stock IDs and, after a configuration change,
+    the configuration before each build.
+  - Indexer lag is documented: see `docs/feeds.md`, "When a rebuild runs".
+- **llms.jsonl offers a product's special price**
+  ([#5](https://github.com/mage-os-lab/module-aeo/issues/5)). The feed's collection never loaded
+  the special price or its dates, so `PriceInfo` saw none and the line had the regular price while
+  the storefront showed the special. The collection now selects `special_price`,
+  `special_from_date` and `special_to_date`, at one more query a page.
+- **A llms.jsonl line can say BackOrder**
+  ([MageOS_Seo #30](https://github.com/mage-os-lab/module-seo/issues/30)). Availability comes from
+  MageOS_Seo's `AvailabilityResolver`, a page of 1,000 products at a time, by the same rules as the
+  product pages: InStock, BackOrder for a product that sells only through backorders, or
+  OutOfStock. A configurable's line takes its best variant's, as its page does (below).
+- **llms.jsonl reads a page's variants at once.** `JsonlBuilder` hands each page of products to
+  `ProductLineBuilder::prefetch()` (MageOS_Seo's `OfferSummaryInterface::prefetch()`), so a
+  configurable's offer costs no query of its own: Luma's sample catalogue builds in 821 queries,
+  where reading each configurable's variants took 2,440.
+- **A configurable without an image of its own lends its first sold variant's** (MageOS_Seo's
+  `VariantImageInterface`). The line read `getImage()`, whose fallback loaded all of the
+  configurable's variants for it. `ProductLineBuilder` takes `VariantImageInterface`.
+- **A configurable's line has the offer its page has** (review M4). It was one Offer, at the
+  configurable's own price and with its own stock row's availability, while its page had an
+  AggregateOffer from its lowest to its highest variant price and its best variant's availability.
+  A composite product's offer now comes from MageOS_Seo's offer summary
+  (`Api\Product\OfferSummaryInterface`), the numbers the page's offer is built from: an
+  AggregateOffer with `lowPrice` and `highPrice` when its variants are priced differently. The
+  build reads each configurable's variants to do so.
+- **A stock lookup that fails leaves availability out** (decision D8a). The lines of the page whose
+  lookup failed said OutOfStock. They now have no availability, and the rebuild is still reported
+  in the admin, with the message "The stock lookup failed, so some products are listed without
+  their availability."
+- **Changing the AI crawler settings purges every store view's robots.txt** (review M5). Core
+  caches robots.txt in the page cache under `robots_<store ID>`, and nothing purged it when
+  **AI Crawler robots.txt Directives** changed, so the old directives were served until the whole
+  page cache was flushed. Changing a setting under `mageos_aeo/ai_robots/`, or returning it to its
+  default, now purges every store view's, once committed (`Observer\PurgeRobotsTxtOnConfigChange`).
+- **A category's link in /llms-full.txt is the URL its page answers at.** It was the category's
+  `url_path` with the category suffix, which 404s once no URL rewrite matches it. It is now the
+  rewrite's request path, and for a category with no rewrite its `catalog/category/view/id/<ID>`
+  URL.
+- **`/llms.txt/`, `/llms-full.txt/` and `/llms.jsonl/`, with a trailing slash, 301 to the
+  document.** They served a second copy, with a cache entry of its own (MageOS_Seo's
+  `CanonicalPathRedirect`).
+
+### Changed
+
+- Requires MageOS_Seo `^2.0` (was `^1.2.1`). Seo's next release is 2.0.0: it carries the batched
+  `AvailabilityResolver` this module now reads, and changes the classes this module uses into
+  `Api` interfaces.
+- **`Model\ResourceModel\StockIndexSalability` is removed**; MageOS_Seo's `AvailabilityResolver`
+  reads the same stock index. `Model\LlmsJsonl\ProductLineBuilder::build()` takes the schema.org
+  availability URI where it took a bool, and `JsonlBuilder` no longer takes the resource model.
+  The module no longer requires `magento/module-inventory-indexer`.
+- Browsers keep a feed for 5 minutes: `Cache-Control: public, max-age=300, s-maxage=86400`.
+  Shared caches still keep it for 24 hours and are purged by tag; a browser's copy cannot be.
+- The configuration observers are `mageos_aeo_refresh_feeds_on_config_save` and
+  `mageos_aeo_refresh_feeds_on_config_delete`, running `Observer\RefreshFeedsOnConfigChange`; they
+  were `mageos_aeo_invalidate_llms_on_config_*`, running `InvalidateLlmsTxtCache`.
+- `Model\Feed\FeedStorage::open()` returns the checked file as a `FeedFile`, and its constructor
+  takes `DirectoryList`, the file driver, `LinkSafeFilesystem` and the cache in place of the
+  framework's directory factories. `open()` and `read()` throw
+  `Exception\FeedStorageUnavailableException` when the configured directory cannot be used.
+  `Model\Feed\StorageDirectory::locate()` judges a directory for reading or writing. The three controllers also take `FeedDelivery`, and `execute()` returns
+  `ResultInterface|ResponseInterface`.
+- `Model\Feed\LlmsInvalidationPolicy` no longer decides configuration changes;
+  `Model\Feed\FeedConfigDependencies` lists what each feed depends on.
+- **The configuration's permission is under Stores → Settings → Configuration**, with every other
+  configuration section's, MageOS_Seo's included (decision D11a). It was under a top-level SEO
+  node. The resource ID, `MageOS_Aeo::config`, is unchanged, so roles keep their grants.
+- **MageOS_Seo through its `Api` interfaces only** (decision D7b). Every class here that used one
+  of MageOS_Seo's classes takes its interface instead; only `Exception\RebuildInProgressException`
+  and `Model\ResourceModel\AbstractConnectedResource` are still extended. A subclass that overrides
+  one of these constructors follows:
+  - the three feed controllers (`RegenerationRequesterInterface`,
+    `CanonicalPathRedirectInterface`); `Model\Feed\DocumentRetirement` and
+    `Setup\Patch\Data\RemoveHreflangSitemap` (`RegenerationRequesterInterface`);
+  - `Model\Feed\FeedRegenerator`, `Model\Feed\LocalFeedFiles` and
+    `Model\Feed\Remote\RemoteFeedFiles` (`ProblemLogInterface`, whose `ALL` replaces
+    `ProblemLog::ALL`);
+  - `Model\Feed\LlmsInvalidationPolicy` (`ChangeInspectorInterface`); the observers
+    `InvalidateLlmsTxtCache`, `InvalidateLlmsJsonlCache` and `RefreshFeedsOnConfigChange`, and
+    `Plugin\InvalidateJsonlOnMassAttributeUpdate` (`InvalidatorInterface`);
+  - `Model\Config\Source\FaqGroups` and `Model\LlmsTxt\FaqLlmsSectionProvider`
+    (`FaqSourcePoolInterface`); `Model\LlmsTxt\PolicyPages` (`StorefrontSettingsInterface`);
+  - `Model\LlmsTxt\LlmsTxtBuilder` takes `SchemaTemplatesInterface`,
+    `StorefrontSettingsInterface`, `ContactEmailInterface`, `PageDirectivesInterface` and this
+    module's `Config`;
+  - `Model\LlmsJsonl\JsonlBuilder` takes this module's `Config` and `PageDirectivesInterface`;
+  - `Model\LlmsJsonl\ProductLineBuilder` takes `StoreManagerInterface`, `SchemaPriceInterface`,
+    `FinalPriceInterface` and `OfferSummaryInterface`, and `build()` takes the availability as
+    `?string`, null for unknown.
+  - The di.xml registrations name `PublicPathsInterface`, `HandlerPoolInterface` and
+    `ProblemLogInterface`.
+
 ## [1.0.0] — 2026-10-05
 
 ### Added

@@ -7,8 +7,10 @@ namespace MageOS\Aeo\Model\LlmsJsonl;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Store\Model\Store;
 use Magento\Store\Model\StoreManagerInterface;
-use MageOS\Seo\Model\Product\FinalPrice;
-use MageOS\Seo\Service\CurrencyService;
+use MageOS\Seo\Api\Product\FinalPriceInterface;
+use MageOS\Seo\Api\Product\OfferSummaryInterface;
+use MageOS\Seo\Api\Product\VariantImageInterface;
+use MageOS\Seo\Api\SchemaPriceInterface;
 
 /**
  * Builds a compact JSON-LD Product node (one line of /llms.jsonl) for a single product.
@@ -16,15 +18,18 @@ use MageOS\Seo\Service\CurrencyService;
  * Deliberately leaner than the full product schema builders: just the fields an AI catalog consumer
  * needs. Omits empty values to keep each line small.
  *
- * A price that is not known (MageOS_Seo's Model\Product\FinalPrice: a lookup that threw, or a
- * composite product nothing can price) is left out of the offer, with its currency, rather than
- * written as 0.00, which reads as free. The offer stays: its availability and URL are still true.
+ * A price that is not known (MageOS_Seo's FinalPriceInterface: a lookup that threw, or a composite
+ * product nothing can price) is left out of the offer, with its currency, rather than written as
+ * 0.00, which reads as free. The offer stays: its availability and URL are still true. So is an
+ * availability that is not known (decision D8a), rather than written as OutOfStock.
+ *
+ * A composite product's offer is the one its page has (review M4): MageOS_Seo's offer summary gives
+ * a configurable's price range across its sellable children, an AggregateOffer when they differ, and
+ * its best child's availability. A simple product keeps the availability the feed resolved for its
+ * whole page, with no lookup of its own.
  */
 class ProductLineBuilder
 {
-    private const AVAILABILITY_IN_STOCK = 'https://schema.org/InStock';
-    private const AVAILABILITY_OUT      = 'https://schema.org/OutOfStock';
-
     /**
      * Maximum description length in characters, ellipsis excluded.
      */
@@ -32,28 +37,47 @@ class ProductLineBuilder
 
     /**
      * @param StoreManagerInterface $storeManager
-     * @param CurrencyService $currencyService
-     * @param FinalPrice $finalPrice
+     * @param SchemaPriceInterface $schemaPrice
+     * @param FinalPriceInterface $finalPrice
+     * @param OfferSummaryInterface $offerSummary
+     * @param VariantImageInterface $variantImage
      */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
-        private readonly CurrencyService       $currencyService,
-        private readonly FinalPrice            $finalPrice
+        private readonly SchemaPriceInterface  $schemaPrice,
+        private readonly FinalPriceInterface   $finalPrice,
+        private readonly OfferSummaryInterface $offerSummary,
+        private readonly VariantImageInterface $variantImage
     ) {
+    }
+
+    /**
+     * Read what a page of products' offers need at once, before build() is asked for each line.
+     *
+     * The configurables' variants in one collection and their stock in one lookup (MageOS_Seo's
+     * OfferSummaryInterface::prefetch()), where each line would otherwise read its configurable's own.
+     *
+     * @param ProductInterface[] $products
+     * @return void
+     */
+    public function prefetch(array $products): void
+    {
+        $this->offerSummary->prefetch($products);
     }
 
     /**
      * Build the JSON-LD Product node for a product.
      *
-     * Salability is passed in explicitly (resolved in one MSI batch call per
-     * collection page by JsonlBuilder) instead of consulting the product's
-     * legacy is_salable state per line.
+     * Availability is passed in (resolved a page of products at a time by JsonlBuilder, through
+     * MageOS_Seo's AvailabilityResolverInterface) rather than looked up per line: InStock, BackOrder
+     * or OutOfStock, a schema.org URI, or null when the lookup failed. A composite product's comes
+     * from its children instead.
      *
      * @param ProductInterface $product
-     * @param bool $isSalable
+     * @param string|null $availability AvailabilityResolverInterface::IN_STOCK, BACKORDER or OUT_OF_STOCK
      * @return array<string, mixed>
      */
-    public function build(ProductInterface $product, bool $isSalable): array
+    public function build(ProductInterface $product, ?string $availability): array
     {
         /** @var \Magento\Catalog\Model\Product $product */
         $url = $product->getProductUrl();
@@ -64,19 +88,8 @@ class ProductLineBuilder
             '@id'      => $url,
             'name'     => (string) $product->getName(),
             'url'      => $url,
-            'offers'   => ['@type' => 'Offer'],
+            'offers'   => $this->offer($product, $availability, $url),
         ];
-
-        // PriceInfo amounts are already in the current (display) currency — core
-        // RegularPrice / SpecialPrice::getValue() convert with PriceCurrency — which is
-        // the priceCurrency emitted with them. Converting again would apply the rate twice.
-        $price = $this->finalPrice->get($product);
-        if ($price !== null) {
-            $node['offers']['price']         = $this->currencyService->formatAmountForLlms($price);
-            $node['offers']['priceCurrency'] = $this->currencyService->getCurrentCurrencyCode();
-        }
-        $node['offers']['availability'] = $isSalable ? self::AVAILABILITY_IN_STOCK : self::AVAILABILITY_OUT;
-        $node['offers']['url']          = $url;
 
         $sku = (string) $product->getSku();
         if ($sku !== '') {
@@ -94,6 +107,51 @@ class ProductLineBuilder
         }
 
         return $node;
+    }
+
+    /**
+     * The product's offer: an Offer, or an AggregateOffer for a configurable priced in a range.
+     *
+     * A configurable whose children are priced differently gets an AggregateOffer from the lowest to
+     * the highest.
+     *
+     * The amounts are already in the current (display) currency emitted with them: converting again
+     * would apply the rate twice.
+     *
+     * @param \Magento\Catalog\Model\Product $product
+     * @param string|null $availability
+     * @param string $url
+     * @return array<string, mixed>
+     */
+    private function offer(ProductInterface $product, ?string $availability, string $url): array
+    {
+        $low = $high = null;
+        if ($product->getTypeInstance()->isComposite($product)) {
+            $summary      = $this->offerSummary->forProduct($product);
+            $price        = $summary['price'];
+            $low          = $summary['lowPrice'];
+            $high         = $summary['highPrice'];
+            $availability = $summary['availability'];
+        } else {
+            $price = $this->finalPrice->get($product);
+        }
+
+        $offer = ['@type' => 'Offer'];
+        if ($low !== null && $high !== null) {
+            $offer['@type']         = 'AggregateOffer';
+            $offer['lowPrice']      = $this->schemaPrice->amount($low);
+            $offer['highPrice']     = $this->schemaPrice->amount($high);
+            $offer['priceCurrency'] = $this->schemaPrice->currencyCode();
+        } elseif ($price !== null) {
+            $offer['price']         = $this->schemaPrice->amount($price);
+            $offer['priceCurrency'] = $this->schemaPrice->currencyCode();
+        }
+        if ($availability !== null) {
+            $offer['availability'] = $availability;
+        }
+        $offer['url'] = $url;
+
+        return $offer;
     }
 
     /**
@@ -135,8 +193,10 @@ class ProductLineBuilder
      */
     private function image(ProductInterface $product): string
     {
-        $image = (string) $product->getImage();
-        if ($image === '' || $image === 'no_selection') {
+        // Not getImage(): for a configurable without its own, core loads all its variants to borrow
+        // one's. MageOS_Seo lends the first sold variant's from the page already read.
+        $image = (string) $this->variantImage->forProduct($product);
+        if ($image === '') {
             return '';
         }
 

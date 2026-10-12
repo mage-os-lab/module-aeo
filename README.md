@@ -23,14 +23,18 @@ This module was part of [mage-os/module-seo](https://github.com/mage-os-lab/modu
   [docs/feeds.md](docs/feeds.md).
 - **Written in each store view's language**, from the same Organization, locale and FAQ sources the
   structured data uses. See [docs/llms-txt.md](docs/llms-txt.md).
-- **Cacheable** for 24 hours, and served without a session, so shared caches can store them.
+- **Cacheable** for 24 hours in shared caches and 5 minutes in browsers, and served without a
+  session, so shared caches can store them. A feed over 0.5 MiB is streamed from its file rather
+  than read into memory.
 
 `/llms.txt` takes the organization name and description from MageOS_Seo's Organization record —
 **configure it first** under **Marketing → SEO → Organization**, or the documents will be
 incomplete.
 
-**Multi-server deployments** must point the web servers and the cron/consumer host at a shared
-mount, which takes one entry in each machine's `app/etc/env.php` as well as the admin setting — see
+**Multi-server deployments** keep the feeds in Magento's remote storage when it is on — see
+[In Magento's remote storage (S3)](docs/feeds.md#in-magentos-remote-storage-s3). Without it, the
+web servers and the cron/consumer host must share a mount, which takes one entry in each machine's
+`app/etc/env.php` as well as the admin setting — see
 [Storing the feeds outside var/](docs/feeds.md#storing-the-feeds-outside-var-multi-server).
 
 ---
@@ -45,8 +49,8 @@ mount, which takes one entry in each machine's `app/etc/env.php` as well as the 
   - Its Organization, locale and FAQ source pool are what the documents describe.
   - Its admin tab and SEO ACL resource hold this module's settings.
   - Its public-path registry keeps sessions off the documents' URLs.
-- Magento MSI (`Inventory*`) modules: `/llms.jsonl` reads availability through the MSI service
-  contracts.
+- Magento MSI (`Inventory*`) modules: `/llms.jsonl` reads availability from MSI's stock index,
+  through MageOS_Seo's `Model\Product\AvailabilityResolver`.
 
 ---
 
@@ -71,12 +75,15 @@ straight away, run `bin/magento seo:rebuild -g llms`.
 
 | Group | Key settings | Default |
 | --- | --- | --- |
-| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents | Yes / Yes / **No** / `global` |
+| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents, Leave Out NOINDEX Pages ([docs/llms-txt.md](docs/llms-txt.md#noindex-pages)) | Yes / Yes / **No** / `global` / Yes |
 | Feed Storage | Where the pre-generated feeds are written | *(empty — `var/mageos_aeo`)* |
 | AI Crawler robots.txt | Append directives, disallow list | **No** / CCBot,Bytespider |
 
-The section is guarded by the ACL resource `MageOS_Aeo::config`, under MageOS_Seo's
-`MageOS_Seo::seo`.
+Changing the AI crawler settings purges every store view's robots.txt from the page cache, once
+the save is committed; core caches it under `robots_<store ID>`.
+
+The section is guarded by the ACL resource `MageOS_Aeo::config`, under Stores → Settings →
+Configuration in the role editor, with every other configuration section's.
 
 Identifiers this module owns:
 - **Feed groups** on MageOS_Seo's rebuild queue: `llms` (`/llms.txt` and `/llms-full.txt`) and

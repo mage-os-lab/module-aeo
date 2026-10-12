@@ -8,6 +8,7 @@
                 <full_enabled>1</full_enabled>
                 <jsonl_enabled>0</jsonl_enabled>
                 <faq_groups>global</faq_groups>
+                <exclude_noindex>1</exclude_noindex>
             </llms_txt>
             <feeds>
                 <!-- empty = var/mageos_aeo; multi-host deployments set a shared mount -->
