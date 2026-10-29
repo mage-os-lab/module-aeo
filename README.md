@@ -12,8 +12,8 @@ This module was part of [mage-os/module-seo](https://github.com/mage-os-lab/modu
 
 | URL | Content | Default |
 | --- | --- | --- |
-| `/llms.txt` | Concise: organization name, description, base URL, locale, schema types, the first 5 FAQs of the selected groups, AI contact | On |
-| `/llms-full.txt` | Extended: the above plus social profiles, full category tree, every FAQ of the selected groups | On |
+| `/llms.txt` | Concise: organization name, description, base URL, locale, schema types, the first 5 FAQs of the selected groups, AI contact | Off |
+| `/llms-full.txt` | Extended: the above plus social profiles, full category tree, every FAQ of the selected groups | Off |
 | `/llms.jsonl` | NDJSON, one compact JSON-LD `Product` node per line | Off |
 | `robots.txt` additions | `Disallow: /` groups for the AI crawlers you choose, out of 14 known ones | Off |
 
@@ -63,9 +63,10 @@ bin/magento setup:upgrade
 bin/magento cache:flush
 ```
 
-`setup:upgrade` queues a first build of the documents the store views can build. The queue
-consumer (`mageosSeoFeedRegenerate`, MageOS_Seo's) must run for them to appear; to build them
-straight away, run `bin/magento seo:rebuild -g llms`.
+All three documents are off by default: switch them on per store view under [Admin](#admin).
+Switching one on queues its build, and `setup:upgrade` queues a first build of the documents the
+store views can build. The queue consumer (`mageosSeoFeedRegenerate`, MageOS_Seo's) must run for
+them to appear; to build them straight away, run `bin/magento seo:rebuild -g llms`.
 
 ---
 
@@ -75,7 +76,7 @@ straight away, run `bin/magento seo:rebuild -g llms`.
 
 | Group | Key settings | Default |
 | --- | --- | --- |
-| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents, Leave Out NOINDEX Pages ([docs/llms-txt.md](docs/llms-txt.md#noindex-pages)) | Yes / Yes / **No** / `global` / Yes |
+| AI Discoverability | `/llms.txt`, `/llms-full.txt`, `/llms.jsonl`, FAQ groups in the llms documents, Leave Out NOINDEX Pages ([docs/llms-txt.md](docs/llms-txt.md#noindex-pages)) | **No** / **No** / **No** / `global` / Yes |
 | Feed Storage | Where the pre-generated feeds are written | *(empty — `var/mageos_aeo`)* |
 | AI Crawler robots.txt | Append directives, disallow list | **No** / CCBot,Bytespider |
 

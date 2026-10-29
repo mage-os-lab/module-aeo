@@ -178,8 +178,8 @@ no longer exists. Until then nothing serves them: a request resolves feeds for t
 view, and theirs is gone.
 
 A feed that no store view can build is never queued: `/llms.jsonl` while it is disabled in
-every store view (the default), `/llms.txt` + `/llms-full.txt` when both are disabled
-everywhere. The one exception is switching a document on or off, below. The logic lives in
+every store view, `/llms.txt` + `/llms-full.txt` when both are disabled everywhere. All three are
+disabled by default. The one exception is switching a document on or off, below. The logic lives in
 `MageOS\Aeo\Model\Feed\LlmsInvalidationPolicy`, and for configuration in
 `MageOS\Aeo\Model\Feed\FeedConfigDependencies`.
 

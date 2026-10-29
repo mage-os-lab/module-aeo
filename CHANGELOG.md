@@ -12,6 +12,26 @@ before 2026-10-02. Its history up to then is kept in that repository.
 
 ## [Unreleased]
 
+## [1.1.2] 2026-10-29
+
+### Fixed
+
+- **A switched-off document's standard-router URL answers `404`.** `mageos-aeo/llms/index`,
+  `mageos-aeo/llmsfull/index` and `mageos-aeo/llmsjsonl/index` redirected to the document's path
+  whether or not the document was on, so a switched-off one answered with a `301` to a `404`. The
+  switch is now checked before the redirect.
+
+## [1.1.1] 2026-10-28
+
+### Changed
+
+- **`/llms.txt` and `/llms-full.txt` are off by default**, as `/llms.jsonl` already was
+  (`mageos_aeo/llms_txt/enabled` and `full_enabled`). A store view that inherits the default stops
+  serving them on upgrade: the paths answer `404`, and the next full rebuild (the nightly cron, or
+  `seo:rebuild` with no `-g`) removes their files. To keep them, set **Enable /llms.txt** and
+  **Enable /llms-full.txt** to Yes under **Stores → Configuration → MageOS SEO → AI Information &
+  Crawlers → AI Discoverability (llms.txt)**. A value saved before is kept.
+
 ## [1.1.0] 2026-10-12
 
 ### Added
