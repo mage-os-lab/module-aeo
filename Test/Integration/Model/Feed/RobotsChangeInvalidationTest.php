@@ -59,8 +59,8 @@ class RobotsChangeInvalidationTest extends TestCase
     }
 
     /**
-     * llms.jsonl is switched on: off, as it is by default, no store view can build it, and a feed no
-     * store view can build is never queued. The llms documents are on by default.
+     * llms.txt and llms.jsonl are switched on: off, as they are by default, no store view can build
+     * them, and a feed no store view can build is never queued.
      *
      * @dataProvider robotsEvents
      * @param string $eventName
@@ -68,6 +68,7 @@ class RobotsChangeInvalidationTest extends TestCase
      * @return void
      */
     #[DataProvider('robotsEvents')]
+    #[Config(AeoConfig::XML_LLMS_ENABLED, '1', ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(AeoConfig::XML_LLMS_JSONL_ENABLED, '1', ScopeInterface::SCOPE_STORE, 'default')]
     public function testARobotsChangeQueuesTheFeedThePageIsIn(string $eventName, string $group): void
     {

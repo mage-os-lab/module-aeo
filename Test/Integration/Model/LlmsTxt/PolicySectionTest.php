@@ -45,6 +45,8 @@ class PolicySectionTest extends TestCase
     /**
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(SeoConfig::XML_RETURN_POLICY_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(SeoConfig::XML_RETURN_POLICY_URL, 'https://shop.test/returns', ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheReturnsPolicyAndTheChosenActivePagesAreListed(): void

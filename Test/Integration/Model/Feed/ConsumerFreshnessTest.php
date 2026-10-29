@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace MageOS\Aeo\Test\Integration\Model\Feed;
 
 use Magento\Framework\FlagManager;
+use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\Organization;
+use MageOS\Seo\Model\Rebuild\BuildFreshness;
 use MageOS\Seo\Model\Rebuild\ProblemLog;
 use MageOS\Seo\Model\Rebuild\RegenerateConsumer;
 use MageOS\Seo\Model\ResourceModel\Organization as OrganizationResource;
@@ -65,6 +69,7 @@ class ConsumerFreshnessTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheSecondBuildSeesAnOrganizationChangedBetweenMessages(): void
     {
         $objectManager = Bootstrap::getObjectManager();
@@ -75,6 +80,10 @@ class ConsumerFreshnessTest extends TestCase
         $organization->setName('Before the change');
         $repository->save($organization);
 
+        // llms.txt is switched on in memory. A configuration change recorded earlier (the sandbox's
+        // install records some) would make the consumer reload the configuration from the database
+        // first (BuildFreshness), which is what a consumer must do, but would throw that value away.
+        $objectManager->get(FlagManager::class)->deleteFlag(BuildFreshness::CONFIG_CHANGED_FLAG);
         $consumer = $objectManager->get(RegenerateConsumer::class);
         $consumer->process('llms');
         $this->assertStringStartsWith('# Before the change', $this->llmsTxt());

@@ -40,6 +40,7 @@ use PHPUnit\Framework\TestCase;
  */
 class FeedInvalidationRulesTest extends TestCase
 {
+    private const LLMS_ENABLED  = 'mageos_aeo/llms_txt/enabled';
     private const JSONL_ENABLED = 'mageos_aeo/llms_txt/jsonl_enabled';
 
     /**
@@ -74,6 +75,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(CategoryFixture::class, as: 'category')]
     #[DataFixture(ProductFixture::class, as: 'product')]
@@ -101,6 +103,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testANewProductQueuesEveryFeed(): void
     {
@@ -126,6 +129,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(CategoryFixture::class, as: 'category')]
     public function testCategorySavesQueueOnlyTheFeedsTheChangeAffects(): void
     {
@@ -147,6 +151,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testCmsPageSavesAndDeletionsQueueLlms(): void
     {
         $pageId = $this->createPage();
@@ -168,6 +173,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(CategoryFixture::class, as: 'new_parent')]
     #[DataFixture(CategoryFixture::class, as: 'category')]
@@ -192,6 +198,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(ProductFixture::class, as: 'product')]
     public function testMassAttributeUpdatesQueueTheFeedsTheAttributesAppearIn(): void
@@ -215,6 +222,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(ProductFixture::class, as: 'product')]
     public function testAMassWebsiteChangeQueuesEveryFeed(): void
@@ -235,6 +243,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(StoreFixture::class, as: 'second_store')]
     #[DataFixture(StoreFixture::class, as: 'third_store')]
     public function testDeletingAStoreViewRemovesItsFeedFiles(): void
@@ -257,6 +266,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::JSONL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testDeletingAProductQueuesEveryFeed(): void
     {
@@ -273,6 +283,7 @@ class FeedInvalidationRulesTest extends TestCase
      *
      * @return void
      */
+    #[Config(self::LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testDeletingACategoryQueuesLlms(): void
     {
         $categoryId = (int) $this->create(CategoryFixture::class)->getId();
