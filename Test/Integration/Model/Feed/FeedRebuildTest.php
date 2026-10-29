@@ -9,13 +9,17 @@ use Magento\Catalog\Test\Fixture\Category as CategoryFixture;
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Filesystem;
 use Magento\Framework\FlagManager;
+use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Fixture\DataFixture;
 use Magento\TestFramework\Fixture\DataFixtureStorageManager;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
+use MageOS\Seo\Model\Rebuild\BuildFreshness;
 use MageOS\Seo\Model\Rebuild\RegenerateConsumer;
 use MageOS\Seo\Model\Rebuild\RegenerationRequester;
 use PHPUnit\Framework\TestCase;
@@ -51,6 +55,7 @@ class FeedRebuildTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[DataFixture(CategoryFixture::class, as: 'category')]
     public function testSavingACategoryKeepsTheServedFeedAndQueuesARebuild(): void
     {
@@ -112,6 +117,8 @@ class FeedRebuildTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheConsumerRebuildsTheGroupAndClearsThePendingFlag(): void
     {
         $objectManager = Bootstrap::getObjectManager();
@@ -120,6 +127,11 @@ class FeedRebuildTest extends TestCase
         $this->assertIsNumeric($this->flags()->getFlagData(self::FLAG_LLMS));
         $this->storage()->write('llms.txt', $this->storeId(), 'outdated');
 
+        // The documents are switched on in memory. A configuration change recorded earlier (the
+        // sandbox's install records some) would make the consumer reload the configuration from the
+        // database first (BuildFreshness), which is what a consumer must do, but would throw those
+        // values away.
+        $this->flags()->deleteFlag(BuildFreshness::CONFIG_CHANGED_FLAG);
         $objectManager->get(RegenerateConsumer::class)->process(FeedRegenerator::GROUP_LLMS);
 
         $this->assertStringStartsWith('# ', (string) $this->storage()->read('llms.txt', $this->storeId()));

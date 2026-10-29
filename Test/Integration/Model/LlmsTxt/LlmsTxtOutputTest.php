@@ -8,6 +8,7 @@ use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Model\Feed\FeedRegenerator;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Model\LlmsTxt\FaqLlmsSectionProvider;
@@ -26,6 +27,9 @@ use PHPUnit\Framework\TestCase;
  *
  * The FAQs come from a test source in the FAQ source pool, so the documents are tested against the
  * source contract, whichever module supplies the FAQs (MageOS_Faq's table is one).
+ *
+ * Both documents are off by default, so each test switches them on: a class-level #[Config] is
+ * not applied by the framework.
  *
  * @magentoAppArea adminhtml
  * @magentoDbIsolation enabled
@@ -66,6 +70,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config('general/locale/code', 'en_GB', ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheLocaleLineIsTheStoreViewLocale(): void
     {
@@ -82,6 +88,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheConciseDocumentFollowsTheLlmsTxtFormat(): void
     {
         [$concise] = $this->build();
@@ -111,6 +119,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::SUPPORT_EMAIL, 'help@shop.test', ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheAiContactIsTheOrganizationContactEmail(): void
     {
@@ -128,6 +138,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::SUPPORT_EMAIL, 'help@shop.test', ScopeInterface::SCOPE_STORE, 'default')]
     public function testWithoutAnOrganizationContactTheConfiguredSupportEmailIsUsed(): void
     {
@@ -142,6 +154,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testNoAiContactWhenTheSupportEmailIsTheShippedDefault(): void
     {
         [$concise, $full] = $this->build();
@@ -155,6 +169,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheGlobalFaqGroupIsIncludedByDefault(): void
     {
         $this->faq('global', 'Do you ship worldwide?');
@@ -174,6 +190,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::FAQ_GROUPS, 'global,shipping', ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheConfiguredFaqGroupsAreIncluded(): void
     {
@@ -196,6 +214,8 @@ class LlmsTxtOutputTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     #[Config(self::FAQ_GROUPS, '', ScopeInterface::SCOPE_STORE, 'default')]
     public function testNoFaqSectionWhenNoGroupIsSelected(): void
     {

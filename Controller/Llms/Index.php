@@ -59,19 +59,21 @@ class Index implements HttpGetActionInterface
      */
     public function execute(): ResultInterface|ResponseInterface
     {
+        $result = $this->rawFactory->create();
+
+        // Checked before the redirect: switched off, the standard-router URL answers 404 itself
+        // rather than redirecting to a path the router no longer claims.
+        if (!$this->aeoConfig->isLlmsTxtEnabled()) {
+            $result->setHttpResponseCode(404);
+            $result->setContents('');
+            return $result;
+        }
+
         // Query-string variants and the standard-router URL collapse to the canonical
         // path so they cannot be used to force cache-missing requests.
         $redirect = $this->canonicalPathRedirect->check(self::FILE);
         if ($redirect !== null) {
             return $redirect;
-        }
-
-        $result = $this->rawFactory->create();
-
-        if (!$this->aeoConfig->isLlmsTxtEnabled()) {
-            $result->setHttpResponseCode(404);
-            $result->setContents('');
-            return $result;
         }
 
         $storeId = (int) $this->storeManager->getStore()->getId();

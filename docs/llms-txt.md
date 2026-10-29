@@ -13,11 +13,12 @@ The module serves two plain-text documents at well-known URLs so LLM crawlers an
 
 Both return `404` when their respective config toggle is off.
 
-Both config toggles are per-store-view settings.
+Both config toggles are per-store-view settings, and both are **off by default**
+(`mageos_aeo/llms_txt/enabled` and `mageos_aeo/llms_txt/full_enabled`).
 
 A third document, `/llms.jsonl`, carries one compact JSON-LD `Product` node per line for the
-store's catalogue (see [Content of /llms.jsonl](#content-of-llmsjsonl)). It is **off by default** —
-turn it on per store view with `mageos_aeo/llms_txt/jsonl_enabled`.
+store's catalogue (see [Content of /llms.jsonl](#content-of-llmsjsonl)). It is **off by default**
+too — turn it on per store view with `mageos_aeo/llms_txt/jsonl_enabled`.
 
 ---
 

@@ -140,8 +140,10 @@ class FeedConfigChangeTest extends TestCase
     public function testAStoreScopeSwitchRetiresOnlyThatStoreView(): void
     {
         $second = (int) DataFixtureStorageManager::getStorage()->get('second_store')->getId();
+        $this->save(self::ENABLED, '1');
         $this->write(['llms.txt'], $this->defaultStoreId());
         $this->write(['llms.txt'], $second);
+        $this->clearPending();
 
         $this->save(self::ENABLED, '0', ScopeInterface::SCOPE_STORES, $second);
 
@@ -212,6 +214,7 @@ class FeedConfigChangeTest extends TestCase
      */
     public function testAValueAFeedShowsQueuesTheRebuildOfEachFeedShowingIt(): void
     {
+        $this->save(self::ENABLED, '1');
         $this->save(self::JSONL_ENABLED, '1');
         $both    = [FeedRegenerator::GROUP_JSONL, FeedRegenerator::GROUP_LLMS];
         $changes = [
@@ -239,6 +242,7 @@ class FeedConfigChangeTest extends TestCase
      */
     public function testOtherConfigurationAndUnchangedValuesQueueNothing(): void
     {
+        $this->save(self::ENABLED, '1');
         $this->save(self::JSONL_ENABLED, '1');
 
         $this->clearPending();

@@ -7,8 +7,11 @@ namespace MageOS\Aeo\Test\Integration\Console;
 use Magento\Framework\FlagManager;
 use Magento\Framework\Setup\ModuleContextInterface;
 use Magento\Framework\Setup\ModuleDataSetupInterface;
+use Magento\Store\Model\ScopeInterface;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Model\Feed\FeedStorage;
 use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
 use MageOS\Seo\Console\Command\RegenerateFeedsCommand;
@@ -55,6 +58,8 @@ class RegenerateFeedsCommandTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
+    #[Config(AeoConfig::XML_LLMS_FULL_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testTheCommandBuildsTheRequestedGroup(): void
     {
         $tester = new CommandTester(
@@ -71,6 +76,7 @@ class RegenerateFeedsCommandTest extends TestCase
      *
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testSetupQueuesARebuildOfTheBuildableFeeds(): void
     {
         $objectManager = Bootstrap::getObjectManager();
@@ -84,7 +90,8 @@ class RegenerateFeedsCommandTest extends TestCase
             $this->createStub(ModuleContextInterface::class)
         );
 
-        // Default configuration on a single store view: only llms.txt / llms-full.txt can be built.
+        // llms.txt switched on and llms.jsonl at its default, off, on a single store view: only the
+        // llms group can be built.
         // The requests wait for a commit the test's transaction never makes.
         $this->commitDeferredRequests();
         $this->assertIsNumeric($flags->getFlagData('mageos_seo_feed_pending_llms'));

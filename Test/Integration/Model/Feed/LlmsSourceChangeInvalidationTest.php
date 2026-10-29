@@ -6,7 +6,10 @@ namespace MageOS\Aeo\Test\Integration\Model\Feed;
 
 use Magento\Framework\Event\ManagerInterface;
 use Magento\Framework\FlagManager;
+use Magento\Store\Model\ScopeInterface;
+use Magento\TestFramework\Fixture\Config;
 use Magento\TestFramework\Helper\Bootstrap;
+use MageOS\Aeo\Model\Config as AeoConfig;
 use MageOS\Aeo\Test\Integration\CommitsDeferredRequests;
 use MageOS\Seo\Api\OrganizationRepositoryInterface;
 use MageOS\Seo\Model\OrganizationRepository;
@@ -58,6 +61,7 @@ class LlmsSourceChangeInvalidationTest extends TestCase
      * @return void
      */
     #[DataProvider('faqEventProvider')]
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testAFaqEventQueuesLlms(string $eventName): void
     {
         $events = Bootstrap::getObjectManager()->get(ManagerInterface::class);
@@ -68,6 +72,7 @@ class LlmsSourceChangeInvalidationTest extends TestCase
     /**
      * @return void
      */
+    #[Config(AeoConfig::XML_LLMS_ENABLED, 1, ScopeInterface::SCOPE_STORE, 'default')]
     public function testSavingTheOrganizationThroughTheRepositoryQueuesLlms(): void
     {
         $repository   = Bootstrap::getObjectManager()->get(OrganizationRepositoryInterface::class);
